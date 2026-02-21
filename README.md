@@ -1,0 +1,477 @@
+![](/../images/logo.png)
+
+An attempt to make a (toy) C++ compiler, for learning and fun (for some definition of “fun”).
+
+> [!NOTE]
+> There is no conceivable arrangement of matter and energy in any universe across the
+infinite tree of all possible realities that could ever make this compiler even remotely
+approach full conformance with the arcane dictates of the ISO C++ Standard.
+
+## Stats
+
+| Lines of Code | |
+| :--- | ---: |
+| `src/` | ![src lines](/../badges/badge_lines_src.svg) |
+| `tests/` | ![tests lines](/../badges/badge_lines_tests.svg) |
+
+## Features
+
+- ✅ Implemented (hopefully)
+- ➖ Partially implemented
+- ❌ Not implemented
+
+### Lexing
+
+- ❌ Identifiers
+- ❌ Keywords
+- ❌ Comments
+- ❌ Operators & punctuators
+- Literals
+  - ❌ Integer
+  - ❌ Floating-point
+  - ❌ String (`""`, `u8""`, `L""`, `R"()"`, ...)
+  - ❌ Character (`''`, `u8''`, `L''`, ...)
+  - ❌ Multicharacter (e.g. `'abcd'`)
+  - ❌ User-defined
+- Escape sequences
+  - ❌ Simple (`\n`, `\t`, `\\`, `\'`, `\"`, ...)
+  - ❌ Numeric (`\0`, `\o{}`, `\x`, `\x{}`, ...)
+  - ❌ Universal character names (`\u`, `\U`, `\u{}`, `\N{}`)
+- ❌ Alternative tokens (`<%`, `<:`, `and`, ...)
+- ❌ Line continuations
+
+### Preprocessor
+
+- ❌ `#if`, `#ifdef`, `#ifndef`, `#elif`, `#elifdef`, `#elifndef`, `#else`, `#endif`
+- ❌ `#include`, `__has_include`
+- ❌ `#define`, `#undef`, `defined`
+- ❌ Expression evaluation
+- ❌ Function-like macros
+- ❌ Variable arguments (`...`, `__VA_ARGS__`, `__VA_OPT__`)
+- ❌ `#` operator
+- ❌ `##` operator
+- ❌ `#line`
+- ❌ `#error`, `#warning`
+- ❌ `#pragma`, `_Pragma`
+- ❌ Predefined macros (`__cplusplus`, `__LINE__`, `__TIME__`, `__has_cpp_attribute`, ...)
+- ❌ Null directive (`#`)
+- ❌ `import`, `export`, `module`
+- ❌ `#embed`, `__has_embed`
+- ❌ Header guard optimization
+- ❌ `#pragma once`
+- ❌ `#pragma pack`
+- ❌ `#pragma STDC`
+- ❌ Undefined behaviors treated as ill-formed
+
+### Parsing
+
+- ❌ String literals concatenation
+- ❌ `(x) * y` disambiguation (cast vs `operator*`)
+- ❌ `x * y` & `x * (y)` disambiguation (declaration vs `operator*`)
+- ❌ `x < y` disambiguation (template argument list vs `operator<`)
+- ❌ `>>` interpreted as `>` `>` in nested templates
+- ❌ Most vexing parse
+- ❌ Attributes
+- ❌ Initializer lists
+- ❌ Designated initializers
+- ❌ Modules
+- ❌ Pack indexing
+- ❌ Splice specifier (`[: :]`)
+- Statements
+  - ❌ Label
+  - ❌ Null (`;`)
+  - ❌ Block
+  - ❌ If (constexpr/consteval)
+  - ❌ Switch
+  - ❌ While
+  - ❌ Do-while
+  - ❌ For
+  - ❌ Range-based `for`
+  - ❌ `break`, `continue`, `return`, `co_return`, `goto`
+  - ❌ Try block & handlers (`catch`)
+  - ❌ `contract_assert`
+  - ❌ `template for`
+- Expressions
+  - ❌ `this`
+  - ❌ Literals
+  - ❌ Identifiers (qualified/unqualified)
+  - ❌ Assignment (`=`, `+=`, `-=`, ...)
+  - ❌ Increment/decrement (`++`, `--`)
+  - ❌ Arithmetic (`+`, `-`, `*`, `&`, ...)
+  - ❌ Logical (`!`, `&&`, `||`)
+  - ❌ Comparison (`==`, `!=`, `<`, `>`, `<=`, `>=`, `<=>`)
+  - ❌ Comma operator
+  - ❌ Conditional (ternary) operator
+  - ❌ Subscript operator (`[]`, `[...]`)
+  - ❌ Indirection operator (`*`)
+  - ❌ Address-of operator (`&`)
+  - ❌ Member access operators (`.`, `->`)
+  - ❌ Pointer-to-member operators (`.*`, `->*`)
+  - ❌ Lambdas
+  - ❌ Fold expressions
+  - ❌ Requires expressions
+  - ❌ `typename` and `template` disambiguators
+  - ❌ `static_cast`, `dynamic_cast`, `const_cast`, `reinterpret_cast`, C-style cast
+  - ❌ `new`, placement `new`
+  - ❌ `delete`, `delete[]`
+  - ❌ `sizeof`, `sizeof...`
+  - ❌ `typeid`
+  - ❌ `noexcept` operator
+  - ❌ `alignof`
+  - ❌ `throw`
+  - ❌ `co_await`, `co_yield`
+  - ❌ Reflection operator (`^^`)
+- Declarations
+  - ❌ Qualified/unqualified name
+  - ❌ Parameter pack
+  - ❌ Pointer
+  - ❌ Pointer-to-member
+  - ❌ Lvalue & rvalue references
+  - ❌ Array
+  - ❌ Parenthesized declarator
+  - ❌ Comma-separated declarations
+  - ❌ Structured bindings
+  - ❌ Function
+  - ❌ Function try block
+  - ❌ Trailing return type
+  - ❌ Function contract specifiers (`pre()`, `post()`)
+  - ❌ Classes, structs, unions, enums (scoped / unscoped)
+  - ❌ Derived classes
+  - ❌ Nested classes
+  - ❌ Operator functions
+  - ❌ Storage class specifiers (`static`, `thread_local`, `extern`, `mutable`)
+  - ❌ `typedef`
+  - ❌ `inline`, `virtual`, `explicit`, `explicit(bool)`
+  - ❌ `constexpr`, `consteval`, `constinit`
+  - ❌ Elaborated type specifiers
+  - ❌ `auto`, `decltype`
+  - ❌ `const`, `volatile`
+  - ❌ `friend`
+  - ❌ `= default`, `= delete`, `= delete("")`, `= 0`
+  - ❌ `override`, `final`
+  - ❌ Constructors & member initializer list
+  - ❌ Destructors
+  - ❌ Ref-qualifiers (in member functions)
+  - ❌ Access specifiers (`public`, `private`, `protected`)
+  - ❌ Bit-fields
+  - ❌ `alignas`
+  - ❌ Inline assembly (`asm`)
+  - ❌ `noexcept` specifier
+  - ❌ Linkage specification
+  - ❌ `using`, `using namespace`, `using enum`
+  - ❌ Namespaces, namespace aliases
+  - ❌ Templates
+  - ❌ Deduction guides
+  - ❌ Explicit template instantiation
+  - ❌ Concepts & requires clauses
+  - ❌ `static_assert`
+- ...
+
+### Semantic analysis
+
+- ❌ `__func__` predefined variable
+- ❌ Variadic functions
+- ❌ Noexcept functions
+- ❌ Deleted functions
+- ❌ Object layout
+- ❌ Automatic object destruction
+- ❌ Dynamic memory management
+- ❌ Copy elision (NRVO)
+- ❌ Deferred temporary materialization (guaranteed copy elision)
+- ❌ Temporary objects lifetime extension
+- ❌ Fold expressions
+- ❌ One Definition Rule
+- ❌ Overload resolution
+- ❌ Type deduction (`auto`, `decltype`, template arguments, return type, ...)
+- ❌ Lambdas
+- ❌ Linkage
+- ❌ Modules
+- ❌ Name-independent declarations (`_`)
+- ❌ Erroneous behaviour detection
+- ❌ `std::this_thread::yield` called in trivial infinite loops
+- ❌ Contract assertions
+- ❌ Expansion statements (`template for`)
+- ❌ Coroutines
+- ❌ Reflection
+- Classes
+  - ❌ Explicit constructors
+  - ❌ Converting constructors
+  - ❌ Implicit object parameter (`this`)
+  - ❌ Deducing `this`
+  - ❌ Injected class name
+  - ❌ Default visibility
+  - ❌ Access control
+  - ❌ Inheritance
+  - ❌ Virtual inheritance
+  - ❌ Virtual functions
+  - ❌ Final (classes & virtual functions)
+  - ❌ Abstract classes
+  - ❌ Covariant return types
+  - ❌ Empty base optimization
+  - ❌ Prospective destructors
+  - ❌ Implicit special member functions (ctor, dtor, copy, move)
+  - ❌ Defaulted and synthesized comparison operator functions
+  - ❌ Unions
+- Name lookup
+  - ❌ Qualified
+  - ❌ Unqualified
+  - ❌ Argument-dependent (ADL)
+  - ❌ Two-phase (dependent vs non-dependent names in templates)
+- Conversions
+  - ❌ Lvalue to rvalue
+  - ❌ Array to pointer
+  - ❌ Function to pointer
+  - ❌ Temporary materialization
+  - ❌ Integral promotion/conversion
+  - ❌ Floating-point promotion/conversion
+  - ❌ Pointer
+  - ❌ Pointer-to-member
+  - ❌ Boolean
+  - ❌ CV-qualification
+  - ❌ Function pointer
+- Templates
+  - ❌ Instantiation
+  - ❌ Full/partial specialization
+  - ❌ Constant template parameters (NTTP)
+  - ❌ Template template parameters
+  - ❌ Abbreviated function templates
+  - ❌ Parameter packs
+  - ❌ Constraints
+  - ❌ SFINAE
+  - ❌ CTAD
+  - ❌ Forwarding references
+- Init
+  - ❌ Default initialization
+  - ❌ Value initialization
+  - ❌ Direct initialization
+  - ❌ Copy initialization
+  - ❌ List initialization
+  - ❌ Aggregate initialization
+  - ❌ Reference initialization
+  - ❌ Static initialization
+  - ❌ Dynamic initialization
+- Attributes
+  - ❌ `alignas`
+  - ❌ `[[assume]]`
+  - ❌ `[[carries_dependency]]`
+  - ❌ `[[deprecated]]`
+  - ❌ `[[fallthrough]]`
+  - ❌ `[[likely]]`, `[[unlikely]]`
+  - ❌ `[[maybe_unused]]`
+  - ❌ `[[nodiscard]]`
+  - ❌ `[[noreturn]]`
+  - ❌ `[[no_unique_address]]`
+  - ❌ `[[indeterminate]]`
+- Builtins
+  - ❌ Type traits (standard layout, triviality, underlying type, ...)
+  - ❌ Sizeof, alignof, offsetof, addressof
+  - ❌ Launder
+  - ❌ Assume aligned
+  - ❌ Bit cast (constexpr)
+  - ❌ Unreachable
+  - ❌ Source location
+  - ❌ Hardware concurrency / interference size
+  - ❌ Fast path for `std::move`, `std::forward`, ...
+  - ❌ Explicit lifetime management (`std::start_lifetime_as`, ...)
+  - ❌ Debugging support (`std::breakpoint`, ...)
+- Compile-time evaluation
+  - ❌ Basic support (operators, function calls, control flow, ...)
+  - ❌ Dynamic memory allocations
+  - ❌ UB detection
+  - ❌ Exceptions
+- ...
+
+### Code generation
+
+- Operations
+  - ❌ Arithmetic (`+`, `-`, `*`, `&`, ...)
+  - ❌ Logical (`!`, `&&`, `||`)
+  - ❌ Comparison (`==`, `!=`, `<`, ...)
+- ❌ Floating-point numbers (IEEE 754)
+- ❌ Control flow (`if`, `while`, `break`, `goto`, ...)
+- ❌ Function calls
+- ❌ Variadic arguments
+- ❌ Pointers / references
+- ❌ Classes (return / pass by value)
+- ❌ External linkage & static storage duration
+- ❌ Thread-local storage
+- ❌ Exceptions
+- ❌ RTTI
+- ❌ Inline assembly
+- ❌ Name mangling
+- ❌ Debug information
+- ❌ Stacktrace
+- Intrinsics
+  - ❌ Atomics
+  - ❌ Bit manipulation
+  - ❌ SIMD
+- ...
+
+### Optimizations
+
+- ❌ Inline expansion
+- ❌ Devirtualization
+- ❌ Common subexpression elimination
+- ❌ Constant folding / propagation
+- ❌ Tail-call elimination
+- ❌ Dead code elimination
+- ❌ Dead store elimination
+- ❌ Loop unrolling
+- ❌ Loop-invariant code motion
+- ❌ Software pipelining
+- ❌ Hot / cold splitting
+- ❌ Strength reduction
+- ❌ Register allocation
+- ❌ Instruction scheduling
+- ❌ Rematerialization
+- ❌ Profile-guided optimizations
+- ❌ Peephole optimizations
+- ❌ Auto-vectorization
+- ...
+
+### Standard library
+
+- ❌ `<algorithm>`
+- ❌ `<any>`
+- ❌ `<array>`
+- ❌ `<atomic>`
+- ❌ `<barrier>`
+- ❌ `<bit>`
+- ❌ `<bitset>`
+- ❌ `<cassert>`
+- ❌ `<cctype>`
+- ❌ `<cerrno>`
+- ❌ `<cfenv>`
+- ❌ `<cfloat>`
+- ❌ `<charconv>`
+- ❌ `<chrono>`
+- ❌ `<cinttypes>`
+- ❌ `<climits>`
+- ❌ `<clocale>`
+- ❌ `<cmath>`
+- ❌ `<compare>`
+- ❌ `<complex>`
+- ❌ `<concepts>`
+- ❌ `<condition_variable>`
+- ❌ `<contracts>`
+- ❌ `<coroutine>`
+- ❌ `<csetjmp>`
+- ❌ `<csignal>`
+- ❌ `<cstdarg>`
+- ❌ `<cstddef>`
+- ❌ `<cstdint>`
+- ❌ `<cstdio>`
+- ❌ `<cstdlib>`
+- ❌ `<cstring>`
+- ❌ `<ctime>`
+- ❌ `<cuchar>`
+- ❌ `<cwchar>`
+- ❌ `<cwctype>`
+- ❌ `<debugging>`
+- ❌ `<deque>`
+- ❌ `<exception>`
+- ❌ `<execution>`
+- ❌ `<expected>`
+- ❌ `<filesystem>`
+- ❌ `<flat_map>`
+- ❌ `<flat_set>`
+- ❌ `<format>`
+- ❌ `<forward_list>`
+- ❌ `<fstream>`
+- ❌ `<functional>`
+- ❌ `<future>`
+- ❌ `<generator>`
+- ❌ `<hazard_pointer>`
+- ❌ `<hive>`
+- ❌ `<initializer_list>`
+- ❌ `<inplace_vector>`
+- ❌ `<iomanip>`
+- ❌ `<ios>`
+- ❌ `<iosfwd>`
+- ❌ `<iostream>`
+- ❌ `<istream>`
+- ❌ `<iterator>`
+- ❌ `<latch>`
+- ❌ `<limits>`
+- ❌ `<linalg>`
+- ❌ `<list>`
+- ❌ `<locale>`
+- ❌ `<map>`
+- ❌ `<mdspan>`
+- ❌ `<memory>`
+- ❌ `<memory_resource>`
+- ❌ `<meta>`
+- ❌ `<mutex>`
+- ❌ `<new>`
+- ❌ `<numbers>`
+- ❌ `<numeric>`
+- ❌ `<optional>`
+- ❌ `<ostream>`
+- ❌ `<print>`
+- ❌ `<queue>`
+- ❌ `<random>`
+- ❌ `<ranges>`
+- ❌ `<ratio>`
+- ❌ `<rcu>`
+- ❌ `<regex>`
+- ❌ `<scoped_allocator>`
+- ❌ `<semaphore>`
+- ❌ `<set>`
+- ❌ `<shared_mutex>`
+- ❌ `<simd>`
+- ❌ `<source_location>`
+- ❌ `<span>`
+- ❌ `<spanstream>`
+- ❌ `<sstream>`
+- ❌ `<stack>`
+- ❌ `<stacktrace>`
+- ❌ `<stdexcept>`
+- ❌ `<stdfloat>`
+- ❌ `<stop_token>`
+- ❌ `<streambuf>`
+- ❌ `<string>`
+- ❌ `<string_view>`
+- ❌ `<syncstream>`
+- ❌ `<system_error>`
+- ❌ `<text_encoding>`
+- ❌ `<thread>`
+- ❌ `<tuple>`
+- ❌ `<type_traits>`
+- ❌ `<typeindex>`
+- ❌ `<typeinfo>`
+- ❌ `<unordered_map>`
+- ❌ `<unordered_set>`
+- ❌ `<utility>`
+- ❌ `<valarray>`
+- ❌ `<variant>`
+- ❌ `<vector>`
+- ❌ `<version>`
+- ❌ `<assert.h>`
+- ❌ `<complex.h>`
+- ❌ `<ctype.h>`
+- ❌ `<errno.h>`
+- ❌ `<fenv.h>`
+- ❌ `<float.h>`
+- ❌ `<inttypes.h>`
+- ❌ `<iso646.h>`
+- ❌ `<limits.h>`
+- ❌ `<locale.h>`
+- ❌ `<math.h>`
+- ❌ `<setjmp.h>`
+- ❌ `<signal.h>`
+- ❌ `<stdalign.h>`
+- ❌ `<stdarg.h>`
+- ❌ `<stdatomic.h>`
+- ❌ `<stdbit.h>`
+- ❌ `<stdbool.h>`
+- ❌ `<stdckdint.h>`
+- ❌ `<stddef.h>`
+- ❌ `<stdint.h>`
+- ❌ `<stdio.h>`
+- ❌ `<stdlib.h>`
+- ❌ `<string.h>`
+- ❌ `<tgmath.h>`
+- ❌ `<time.h>`
+- ❌ `<uchar.h>`
+- ❌ `<wchar.h>`
+- ❌ `<wctype.h>`

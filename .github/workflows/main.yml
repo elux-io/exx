@@ -1,0 +1,74 @@
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  count-lines:
+    name: Count lines of code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install cloc
+        run: |
+          sudo apt-get update
+          sudo apt-get install cloc -y
+
+      - name: Checkout main branch
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: main
+
+      - name: Count lines
+        id: lines
+        run: |
+          src=$(cloc main/src --csv | awk -F , '/SUM/ {print $5}')
+          tests=$(cloc main/tests --csv | awk -F , '/SUM/ {print $5}')
+          echo "src=${src:-0}" >> $GITHUB_OUTPUT
+          echo "tests=${tests:-0}" >> $GITHUB_OUTPUT
+
+      - name: Generate src badge
+        uses: elux-io/seven-segment-display-generator@main
+        id: src-badge
+        with:
+          text: ${{ steps.lines.outputs.src }}
+          active-color: '#894aff'
+          height: 60
+          spacing: 12
+          slant: 4
+          min-chars: 4
+
+      - name: Generate tests badge
+        uses: elux-io/seven-segment-display-generator@main
+        id: tests-badge
+        with:
+          text: ${{ steps.lines.outputs.tests }}
+          active-color: '#894aff'
+          height: 60
+          spacing: 12
+          slant: 4
+          min-chars: 4
+
+      - name: Checkout badges branch
+        uses: actions/checkout@v6
+        with:
+          ref: badges
+
+      - name: Create badges files
+        shell: bash
+        run: |
+          cat << 'EOF' > badge_lines_src.svg
+          ${{ steps.src-badge.outputs.svg }}
+          EOF
+          cat << 'EOF' > badge_lines_tests.svg
+          ${{ steps.tests-badge.outputs.svg }}
+          EOF
+
+      - name: Commit and push badges
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "badge*.svg"
+          git commit -m 'update badges' --amend
+          git push -f
