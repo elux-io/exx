@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arrayvec = "0.7.6"
+unicode-ident = "1.0.24"
+unicode_names2 = "2.0.0"

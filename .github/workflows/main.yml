@@ -23,8 +23,8 @@ jobs:
       - name: Count lines
         id: lines
         run: |
-          src=$(cloc main/src --csv | awk -F , '/SUM/ {print $5}')
-          tests=$(cloc main/tests --csv | awk -F , '/SUM/ {print $5}')
+          src=$(cloc main/src --strip-str-comments --csv | awk -F , '/SUM/ {print $5}')
+          tests=$(cloc main/tests --strip-str-comments --csv | awk -F , '/SUM/ {print $5}')
           echo "src=${src:-0}" >> $GITHUB_OUTPUT
           echo "tests=${tests:-0}" >> $GITHUB_OUTPUT
 

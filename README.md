@@ -22,23 +22,23 @@ approach full conformance with the arcane dictates of the ISO C++ Standard.
 
 ### Lexing
 
-- ❌ Identifiers
-- ❌ Keywords
-- ❌ Comments
-- ❌ Operators & punctuators
+- ✅ Identifiers
+- ✅ Keywords
+- ✅ Comments
+- ✅ Operators & punctuators
 - Literals
-  - ❌ Integer
-  - ❌ Floating-point
-  - ❌ String (`""`, `u8""`, `L""`, `R"()"`, ...)
-  - ❌ Character (`''`, `u8''`, `L''`, ...)
-  - ❌ Multicharacter (e.g. `'abcd'`)
-  - ❌ User-defined
+  - ✅ Integer
+  - ✅ Floating-point
+  - ✅ String (`""`, `u8""`, `L""`, `R"()"`, ...)
+  - ✅ Character (`''`, `u8''`, `L''`, ...)
+  - ✅ Multicharacter (e.g. `'abcd'`)
+  - ✅ User-defined
 - Escape sequences
-  - ❌ Simple (`\n`, `\t`, `\\`, `\'`, `\"`, ...)
-  - ❌ Numeric (`\0`, `\o{}`, `\x`, `\x{}`, ...)
-  - ❌ Universal character names (`\u`, `\U`, `\u{}`, `\N{}`)
-- ❌ Alternative tokens (`<%`, `<:`, `and`, ...)
-- ❌ Line continuations
+  - ✅ Simple (`\n`, `\t`, `\\`, `\'`, `\"`, ...)
+  - ✅ Numeric (`\0`, `\o{}`, `\x`, `\x{}`, ...)
+  - ✅ Universal character names (`\u`, `\U`, `\u{}`, `\N{}`)
+- ✅ Alternative tokens (`<%`, `<:`, `and`, ...)
+- ✅ Line continuations
 
 ### Preprocessor
 
