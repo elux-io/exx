@@ -373,7 +373,7 @@ fn comments() {
     tokens!("//a", []);
     tokens!("//\n", []);
     tokens!("//bonjour\n", []);
-    tokens!("// b/* 🤡 */ n */ é // jour + 2 \n", []);
+    tokens!(r"// b/* 🤡 */ n */ \u0061 é // jour + 2 \n", []);
     // followed by something
     tokens!("// bonjour\na", [(Ident, 11..12)]);
     // different types of newline
@@ -388,7 +388,7 @@ fn comments() {
     tokens!("/**/", []);
     tokens!("/* bonjour */", []);
     tokens!("/* * / */", []);
-    tokens!("/** b🤡n + jour 2 */", []);
+    tokens!(r"/** b🤡n + jour \u0061 2 */", []);
     // they don't nest
     tokens!("/* a /* /* /* b */", []);
     tokens!("/* a /* b */ c */", [(Ident, 13..14), (Star, 15..16), (Slash, 16..17)]);

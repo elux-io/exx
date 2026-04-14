@@ -1870,16 +1870,15 @@ impl<'a> Lexer<'a> {
     fn line_comment(&mut self) {
         debug_assert_eq!(self.peek(0), '/');
         debug_assert_eq!(self.peek(1), '/');
-        self.bump();
-        self.bump();
+        self.chars.next();
+        self.chars.next();
 
-        // todo: on pourrait chercher le newline directement dans les bytes au
-        // lieu de bump
+        // todo: on pourrait chercher le newline directement dans les bytes
         while !self.eof() {
             if eat_newline(&mut self.chars) {
                 return;
             }
-            self.bump();
+            self.chars.next();
         }
     }
 
@@ -1888,15 +1887,15 @@ impl<'a> Lexer<'a> {
         debug_assert_eq!(self.peek(1), '*');
 
         let start = self.pos();
-        self.bump();
-        self.bump();
+        self.chars.next();
+        self.chars.next();
 
-        // todo: on pourrait chercher le `*` dans les bytes au lieu de bump
+        // todo: on pourrait chercher le `*` dans les bytes
         while !self.eof() {
             if self.eat_two('*', '/') {
                 return;
             }
-            self.bump();
+            self.chars.next();
         }
 
         self.errors.push(LexError::Unterminated(
