@@ -127,7 +127,7 @@ pub enum TokenKind {
     Slash,      // /
     Percent,    // %
     Caret,      // ^
-    CaretCaret, // ^^
+    CatEars,    // ^^
     And,        // &
     Or,         // |
     Eq,         // =
@@ -1309,7 +1309,7 @@ impl<'a> Lexer<'a> {
             Some('/') if self.eat('=') => SlashEq,
             Some('/') => Slash,
 
-            Some('^') if self.eat('^') => CaretCaret,
+            Some('^') if self.eat('^') => CatEars,
             Some('^') if self.eat('=') => CaretEq,
             Some('^') => Caret,
 

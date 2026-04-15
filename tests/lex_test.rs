@@ -200,7 +200,7 @@ fn operators() {
     tokens!(".*", [(DotStar, 0..2)]);
     tokens!("->", [(Arrow, 0..2)]);
     tokens!("->*", [(ArrowStar, 0..3)]);
-    tokens!("^^", [(CaretCaret, 0..2)]);
+    tokens!("^^", [(CatEars, 0..2)]);
     tokens!("~", [(Tilde, 0..1)]);
     tokens!("!", [(Bang, 0..1)]);
     tokens!("+", [(Plus, 0..1)]);
@@ -253,7 +253,7 @@ fn operators() {
     tokens!("=====", [(EqEq, 0..2), (EqEq, 2..4), (Eq, 4..5)]);
     tokens!("&&&&&", [(AndAnd, 0..2), (AndAnd, 2..4), (And, 4..5)]);
     tokens!("|||||", [(OrOr, 0..2), (OrOr, 2..4), (Or, 4..5)]);
-    tokens!("^^^^^", [(CaretCaret, 0..2), (CaretCaret, 2..4), (Caret, 4..5)]);
+    tokens!("^^^^^", [(CatEars, 0..2), (CatEars, 2..4), (Caret, 4..5)]);
     tokens!(":::::", [(ColonColon, 0..2), (ColonColon, 2..4), (Colon, 4..5)]);
     tokens!("#####", [(HashHash, 0..2), (HashHash, 2..4), (Hash, 4..5)]);
 
