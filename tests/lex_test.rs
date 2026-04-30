@@ -82,101 +82,8 @@ fn to_utf32(s: &str) -> ByteString {
     ByteString(vec)
 }
 
-#[test]
-fn keywords() {
-    tokens!("import", [(Import, 0..6)]);
-    tokens!("module", [(Module, 0..6)]);
-    tokens!("export", [(Export, 0..6)]);
-
-    tokens!("alignas", [(KwAlignas, 0..7)]);
-    tokens!("constinit", [(KwConstinit, 0..9)]);
-    tokens!("extern", [(KwExtern, 0..6)]);
-    tokens!("protected", [(KwProtected, 0..9)]);
-    tokens!("throw", [(KwThrow, 0..5)]);
-    tokens!("alignof", [(KwAlignof, 0..7)]);
-    tokens!("const_cast", [(KwConstCast, 0..10)]);
-    tokens!("false", [(KwFalse, 0..5)]);
-    tokens!("public", [(KwPublic, 0..6)]);
-    tokens!("true", [(KwTrue, 0..4)]);
-    tokens!("asm", [(KwAsm, 0..3)]);
-    tokens!("continue", [(KwContinue, 0..8)]);
-    tokens!("float", [(KwFloat, 0..5)]);
-    tokens!("register", [(KwRegister, 0..8)]);
-    tokens!("try", [(KwTry, 0..3)]);
-    tokens!("auto", [(KwAuto, 0..4)]);
-    tokens!("contract_assert", [(KwContractAssert, 0..15)]);
-    tokens!("for", [(KwFor, 0..3)]);
-    tokens!("reinterpret_cast", [(KwReinterpretCast, 0..16)]);
-    tokens!("typedef", [(KwTypedef, 0..7)]);
-    tokens!("bool", [(KwBool, 0..4)]);
-    tokens!("co_await", [(KwCoAwait, 0..8)]);
-    tokens!("friend", [(KwFriend, 0..6)]);
-    tokens!("requires", [(KwRequires, 0..8)]);
-    tokens!("typeid", [(KwTypeid, 0..6)]);
-    tokens!("break", [(KwBreak, 0..5)]);
-    tokens!("co_return", [(KwCoReturn, 0..9)]);
-    tokens!("goto", [(KwGoto, 0..4)]);
-    tokens!("return", [(KwReturn, 0..6)]);
-    tokens!("typename", [(KwTypename, 0..8)]);
-    tokens!("case", [(KwCase, 0..4)]);
-    tokens!("co_yield", [(KwCoYield, 0..8)]);
-    tokens!("if", [(KwIf, 0..2)]);
-    tokens!("short", [(KwShort, 0..5)]);
-    tokens!("union", [(KwUnion, 0..5)]);
-    tokens!("catch", [(KwCatch, 0..5)]);
-    tokens!("decltype", [(KwDecltype, 0..8)]);
-    tokens!("inline", [(KwInline, 0..6)]);
-    tokens!("signed", [(KwSigned, 0..6)]);
-    tokens!("unsigned", [(KwUnsigned, 0..8)]);
-    tokens!("char", [(KwChar, 0..4)]);
-    tokens!("default", [(KwDefault, 0..7)]);
-    tokens!("int", [(KwInt, 0..3)]);
-    tokens!("sizeof", [(KwSizeof, 0..6)]);
-    tokens!("using", [(KwUsing, 0..5)]);
-    tokens!("char8_t", [(KwChar8T, 0..7)]);
-    tokens!("delete", [(KwDelete, 0..6)]);
-    tokens!("long", [(KwLong, 0..4)]);
-    tokens!("static", [(KwStatic, 0..6)]);
-    tokens!("virtual", [(KwVirtual, 0..7)]);
-    tokens!("char16_t", [(KwChar16T, 0..8)]);
-    tokens!("do", [(KwDo, 0..2)]);
-    tokens!("mutable", [(KwMutable, 0..7)]);
-    tokens!("static_assert", [(KwStaticAssert, 0..13)]);
-    tokens!("void", [(KwVoid, 0..4)]);
-    tokens!("char32_t", [(KwChar32T, 0..8)]);
-    tokens!("double", [(KwDouble, 0..6)]);
-    tokens!("namespace", [(KwNamespace, 0..9)]);
-    tokens!("static_cast", [(KwStaticCast, 0..11)]);
-    tokens!("volatile", [(KwVolatile, 0..8)]);
-    tokens!("class", [(KwClass, 0..5)]);
-    tokens!("dynamic_cast", [(KwDynamicCast, 0..12)]);
-    tokens!("new", [(KwNew, 0..3)]);
-    tokens!("struct", [(KwStruct, 0..6)]);
-    tokens!("wchar_t", [(KwWcharT, 0..7)]);
-    tokens!("concept", [(KwConcept, 0..7)]);
-    tokens!("else", [(KwElse, 0..4)]);
-    tokens!("noexcept", [(KwNoexcept, 0..8)]);
-    tokens!("switch", [(KwSwitch, 0..6)]);
-    tokens!("while", [(KwWhile, 0..5)]);
-    tokens!("const", [(KwConst, 0..5)]);
-    tokens!("enum", [(KwEnum, 0..4)]);
-    tokens!("nullptr", [(KwNullptr, 0..7)]);
-    tokens!("template", [(KwTemplate, 0..8)]);
-    tokens!("consteval", [(KwConsteval, 0..9)]);
-    tokens!("explicit", [(KwExplicit, 0..8)]);
-    tokens!("operator", [(KwOperator, 0..8)]);
-    tokens!("this", [(KwThis, 0..4)]);
-    tokens!("constexpr", [(KwConstexpr, 0..9)]);
-    tokens!("private", [(KwPrivate, 0..7)]);
-    tokens!("thread_local", [(KwThreadLocal, 0..12)]);
-
-    // not a keyword
-    tokens!("ifelse", [(Ident, 0..6)]);
-    tokens!("if2", [(Ident, 0..3)]);
-
-    // with line continuations
-    tokens!("e\\\nl\\\nse", [(KwElse, 0..8)]);
-    lexeme!("e\\\nl\\\nse", "else");
+fn name(s: &str) -> TokenKind {
+    Name(exx::name::Name::from(s))
 }
 
 #[test]
@@ -241,7 +148,7 @@ fn operators() {
     tokens!("[:::", [(SpliceL, 0..2), (ColonColon, 2..4)]);
     // mais pas dans ces cas
     tokens!("[::", [(BracketL, 0..1), (ColonColon, 1..3)]);
-    tokens!("[::a", [(BracketL, 0..1), (ColonColon, 1..3), (Ident, 3..4)]);
+    tokens!("[::a", [(BracketL, 0..1), (ColonColon, 1..3), (name("a"), 3..4)]);
     tokens!("[::]", [(BracketL, 0..1), (ColonColon, 1..3), (BracketR, 3..4)]);
     tokens!("[:>", [(BracketL, 0..1), (BracketR, 1..3)]);
 
@@ -292,10 +199,10 @@ fn alternative_tokens() {
     tokens!("::>", [(ColonColon, 0..2), (Gt, 2..3)]);
     // de plus, ceci n'est _pas_ l'alternative token de `[` suivi de `:`
     tokens!("<::", [(Lt, 0..1), (ColonColon, 1..3)]);
-    tokens!("<::a", [(Lt, 0..1), (ColonColon, 1..3), (Ident, 3..4)]);
+    tokens!("<::a", [(Lt, 0..1), (ColonColon, 1..3), (name("a"), 3..4)]);
 
     // `<:` est bien l'alternative token de `[` dans ces cas
-    tokens!("<:a", [(BracketL, 0..2), (Ident, 2..3)]);
+    tokens!("<:a", [(BracketL, 0..2), (name("a"), 2..3)]);
     tokens!("<::>", [(BracketL, 0..2), (BracketR, 2..4)]);
     tokens!("<:::", [(BracketL, 0..2), (ColonColon, 2..4)]);
 
@@ -327,42 +234,38 @@ fn alternative_tokens() {
 
 #[test]
 fn ident() {
-    tokens!("abcdefghijklmnopqrstuvwxyz", [(Ident, 0..26)]);
-    tokens!("ABCDEFGHIJKLMNOPQRSTUVWXYZ", [(Ident, 0..26)]);
-    tokens!("a1234567890", [(Ident, 0..11)]);
-    tokens!("ab_3_cX", [(Ident, 0..7)]);
-    tokens!("_Y_s_", [(Ident, 0..5)]);
-    tokens!("éòÿà", [(Ident, 0..8)]);
-    tokens!("𝐀b𝐀", [(Ident, 0..9)]);
+    tokens!("abcdefghijklmnopqrstuvwxyz", [(name("abcdefghijklmnopqrstuvwxyz"), 0..26)]);
+    tokens!("ABCDEFGHIJKLMNOPQRSTUVWXYZ", [(name("ABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0..26)]);
+    tokens!("a1234567890", [(name("a1234567890"), 0..11)]);
+    tokens!("ab_3_cX", [(name("ab_3_cX"), 0..7)]);
+    tokens!("_Y_s_", [(name("_Y_s_"), 0..5)]);
+    tokens!("éòÿà", [(name("éòÿà"), 0..8)]);
+    tokens!("𝐀b𝐀", [(name("𝐀b𝐀"), 0..9)]);
 
     // `·` == `U+00B7` ne peut pas apparaître au début d'un identifiant
     // (XID_Continue mais pas XID_Start)
-    tokens!("·abc", [(Unknown, 0..2), (Ident, 2..5)]);
-    tokens!("ab·c", [(Ident, 0..5)]);
+    tokens!("·abc", [(Unknown, 0..2), (name("abc"), 2..5)]);
+    tokens!("ab·c", [(name("ab·c"), 0..5)]);
 
     // pas un identifiant
     tokens!("0abc", [(Number, 0..4)]);
 
-    tokens!("ab+c", [(Ident, 0..2), (Plus, 2..3), (Ident, 3..4)]);
+    tokens!("ab+c", [(name("ab"), 0..2), (Plus, 2..3), (name("c"), 3..4)]);
     // c'est un `U+00D7`, pas un 'x'
-    tokens!("ab×c", [(Ident, 0..2), (Unknown, 2..4), (Ident, 4..5)]);
+    tokens!("ab×c", [(name("ab"), 0..2), (Unknown, 2..4), (name("c"), 4..5)]);
     // les emojis ne font pas partie des identifiants iiuc ([lex.name])
     // todo: ça serait peut-être mieux de considérer que c'est quand même un
     // identifiant et refuser par la suite au lieu d'avoir un token Unknown débile
-    tokens!("ab🤡c", [(Ident, 0..2), (Unknown, 2..6), (Ident, 6..7)]);
+    tokens!("ab🤡c", [(name("ab"), 0..2), (Unknown, 2..6), (name("c"), 6..7)]);
 
     // with UCN
-    tokens!(r"a\u00E9c", [(Ident, 0..8)]);
-    lexeme!(r"a\u00E9c", "aéc");
-    tokens!(r"\u00E9\u00E0", [(Ident, 0..12)]);
-    lexeme!(r"\u00E9\u00E0", "éà");
-    tokens!(r"\U000000E9\u00E0", [(Ident, 0..16)]);
-    lexeme!(r"\U000000E9\u00E0", "éà");
-    tokens!(r"\N{LATIN SMALL LETTER E WITH ACUTE}\u00E0", [(Ident, 0..41)]);
-    lexeme!(r"\N{LATIN SMALL LETTER E WITH ACUTE}\u00E0", "éà");
+    tokens!(r"a\u00E9c", [(name("aéc"), 0..8)]);
+    tokens!(r"\u00E9\u00E0", [(name("éà"), 0..12)]);
+    tokens!(r"\U000000E9\u00E0", [(name("éà"), 0..16)]);
+    tokens!(r"\N{LATIN SMALL LETTER E WITH ACUTE}\u00E0", [(name("éà"), 0..41)]);
 
     // with line continuations
-    tokens!("a\\\n\\u\\\n00\\\nE9c", [(Ident, 0..14)]);
+    tokens!("a\\\n\\u\\\n00\\\nE9c", [(name("aéc"), 0..14)]);
     lexeme!("a\\\n\\u\\\n00\\\nE9c", "aéc");
 }
 
@@ -375,12 +278,12 @@ fn comments() {
     tokens!("//bonjour\n", []);
     tokens!(r"// b/* 🤡 */ n */ \u0061 é // jour + 2 \n", []);
     // followed by something
-    tokens!("// bonjour\na", [(Ident, 11..12)]);
+    tokens!("// bonjour\na", [(name("a"), 11..12)]);
     // different types of newline
-    tokens!("// bonjour\r\na", [(Ident, 12..13)]);
-    tokens!("// bonjour\ra", [(Ident, 11..12)]);
+    tokens!("// bonjour\r\na", [(name("a"), 12..13)]);
+    tokens!("// bonjour\ra", [(name("a"), 11..12)]);
     // preceded by something
-    tokens!("a//bonjour\nb", [(Ident, 0..1), (Ident, 11..12)]);
+    tokens!("a//bonjour\nb", [(name("a"), 0..1), (name("b"), 11..12)]);
     // ending with eof
     tokens!("//bonjour", []);
 
@@ -391,11 +294,11 @@ fn comments() {
     tokens!(r"/** b🤡n + jour \u0061 2 */", []);
     // they don't nest
     tokens!("/* a /* /* /* b */", []);
-    tokens!("/* a /* b */ c */", [(Ident, 13..14), (Star, 15..16), (Slash, 16..17)]);
+    tokens!("/* a /* b */ c */", [(name("c"), 13..14), (Star, 15..16), (Slash, 16..17)]);
     // with single line comment inside
     tokens!("/* ab // cd */", []);
     // with something before/after
-    tokens!("a/* bonjour */b", [(Ident, 0..1), (Ident, 14..15)]);
+    tokens!("a/* bonjour */b", [(name("a"), 0..1), (name("b"), 14..15)]);
 
     // unterminated
     errors!("/*", [LexError::Unterminated(UnterminatedKind::MultilineComment, 0)]);
@@ -414,7 +317,7 @@ a
     commentaire
 b
 ";
-    tokens!(src, [(Ident, 1..2), (Ident, 28..29)]);
+    tokens!(src, [(name("a"), 1..2), (name("b"), 28..29)]);
 
     let src =
 r"
@@ -423,7 +326,7 @@ a/\
 blabla *\
 /b
 ";
-    tokens!(src, [(Ident, 1..2), (Ident, 27..28)]);
+    tokens!(src, [(name("a"), 1..2), (name("b"), 27..28)]);
 }
 
 #[test]
@@ -441,11 +344,11 @@ fn char() {
     tokens!("L'a'", [(Char(Encoding::Wide, 'a' as u32, None), 0..4)]);
     // not a prefix
     tokens!("u 'a'", [
-        (Ident, 0..1),
+        (name("u"), 0..1),
         (Char(Encoding::Ordinary, 'a' as u32, None), 2..5),
     ]);
     tokens!("a'a'", [
-        (Ident, 0..1),
+        (name("a"), 0..1),
         (Char(Encoding::Ordinary, 'a' as u32, None), 1..4),
     ]);
 
@@ -471,7 +374,7 @@ fn char() {
     errors!(r"U'ab'", [LexError::Char(CharError::MulticharPrefix, 0..5)]);
     errors!(r"L'ab'", [LexError::Char(CharError::MulticharPrefix, 0..5)]);
     tokens!("a'ab'", [
-        (Ident, 0..1),
+        (name("a"), 0..1),
         (Multichar(24930, None), 1..5),
     ]);
     // invalid chars
@@ -606,7 +509,7 @@ fn char() {
     tokens_and_errors!("'a\n_abc",
         [
             (Char(Encoding::Ordinary, 'a' as u32, None), 0..2),
-            (Ident, 3..7),
+            (name("_abc"), 3..7),
         ],
         [LexError::Unterminated(UnterminatedKind::Char, 0)]
     );
@@ -632,11 +535,11 @@ fn str() {
     tokens!("U\"abc\"", [(Str(StrKind::NonRaw, Encoding::Utf32, to_utf32("abc"), None), 0..6)]);
     // not a prefix
     tokens!(r#"u8 "abc""#, [
-        (Ident, 0..2),
+        (name("u8"), 0..2),
         (Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("abc"), None), 3..8),
     ]);
     tokens!(r#"a"abc""#, [
-        (Ident, 0..1),
+        (name("a"), 0..1),
         (Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("abc"), None), 1..6),
     ]);
 
@@ -715,7 +618,7 @@ fn str() {
     tokens_and_errors!("\"salut\n_abc",
         [
             (Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("salut"), None), 0..6),
-            (Ident, 7..11),
+            (name("_abc"), 7..11),
         ],
         [LexError::Unterminated(UnterminatedKind::Str, 0)]
     );
@@ -808,8 +711,8 @@ fn raw_str() {
         [
             (Str(StrKind::Raw, Encoding::Ordinary, to_utf8(""), None), 0..12),
             (ParenR, 12..13),
-            (Ident, 13..15),
-            (Ident, 16..18),
+            (name("de"), 13..15),
+            (name("im"), 16..18),
         ],
         [LexError::Str(StrError::InvalidCharInDelim, 4..5)]
     );
@@ -836,7 +739,7 @@ fn raw_str() {
     tokens!("UR\"(abc)\"", [(Str(StrKind::Raw, Encoding::Utf32, to_utf32("abc"), None), 0..9)]);
     // not a prefix
     tokens!("Ru8\"(abc)\"", [
-        (Ident, 0..3),
+        (name("Ru8"), 0..3),
         (Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("(abc)"), None), 3..10),
     ]);
 
@@ -922,7 +825,7 @@ fn simple_escape_seq() {
     errors!(r"'\z'", [LexError::Escape(EscapeError::UnknownEscape, 1..2)]);
 
     // outside char and str (ce n'est pas encore une erreur, juste un token Unknown)
-    tokens!(r"\n", [(Unknown, 0..1), (Ident, 1..2)]);
+    tokens!(r"\n", [(Unknown, 0..1), (name("n"), 1..2)]);
 
     // on ne peut utiliser des UCN pour former une escape sequence
     // `\u006E` = `n`
@@ -1001,18 +904,18 @@ fn numeric_escape_seq() {
     ]);
     tokens!(r"\o{12}", [
         (Unknown, 0..1),
-        (Ident, 1..2),
+        (name("o"), 1..2),
         (BraceL, 2..3),
         (Number, 3..5),
         (BraceR, 5..6),
     ]);
     tokens!(r"\x12", [
         (Unknown, 0..1),
-        (Ident, 1..4),
+        (name("x12"), 1..4),
     ]);
     tokens!(r"\x{12}", [
         (Unknown, 0..1),
-        (Ident, 1..2),
+        (name("x"), 1..2),
         (BraceL, 2..3),
         (Number, 3..5),
         (BraceR, 5..6),
@@ -1084,25 +987,23 @@ fn ucn() {
     // todo: peut-être qu'il faut faire différemment?
     // `\u0041` == `A`
     tokens_and_errors!(r"ab\u0041c",
-        [(Ident, 0..9)],
+        [(name("abAc"), 0..9)],
         [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, span: 2..3 }]
     );
-    lexeme!(r"ab\u0041c", "abAc");
 
     tokens_and_errors!(r"ab\u0001c",
-        [(Ident, 0..2), (Unknown, 2..8), (Ident, 8..9)],
+        [(name("ab"), 0..2), (Unknown, 2..8), (name("c"), 8..9)],
         [LexError::UnexpectedBasicUcn { c: '\u{1}', is_control: true, span: 2..3 }]
     );
 
     tokens_and_errors!(r"\u0041",
-        [(Ident, 0..6)],
+        [(name("A"), 0..6)],
         [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, span: 0..1 }]
     );
-    lexeme!(r"\u0041", "A");
 
     // les ucns invalides sont interprétés caractère par caractère
     tokens_and_errors!(r"ab\uCD",
-        [(Ident, 0..2), (Unknown, 2..3), (Ident, 3..6)],
+        [(name("ab"), 0..2), (Unknown, 2..3), (name("uCD"), 3..6)],
         [LexError::Escape(EscapeError::ExpectedDigits { n: 4, base: 16 }, 2..3)]
     );
 
@@ -1131,50 +1032,44 @@ fn ucn() {
 
 #[test]
 fn line_continuations() {
-    tokens!("a\\\nb", [(Ident, 0..4)]);
-    lexeme!("a\\\nb", "ab");
-    tokens!("a\\   \nb", [(Ident, 0..7)]);
-    lexeme!("a\\   \nb", "ab");
-    tokens!("a\\ \t \u{B} \u{C} \nb", [(Ident, 0..11)]);
-    lexeme!("a\\ \t \u{B} \u{C} \nb", "ab");
-    tokens!("\\  \na", [(Ident, 4..5)]);
+    tokens!("a\\\nb", [(name("ab"), 0..4)]);
+    tokens!("a\\   \nb", [(name("ab"), 0..7)]);
+    tokens!("a\\ \t \u{B} \u{C} \nb", [(name("ab"), 0..11)]);
+    tokens!("\\  \na", [(name("a"), 4..5)]);
     tokens!("a\\\nb\\\n c", [
-        (Ident, 0..4),
-        (Ident, 7..8),
+        (name("ab"), 0..4),
+        (name("c"), 7..8),
     ]);
 
     // avec \r\n
-    tokens!("a\\\r\nb", [(Ident, 0..5)]);
-    lexeme!("a\\\r\nb", "ab");
+    tokens!("a\\\r\nb", [(name("ab"), 0..5)]);
 
     // avec \r
-    tokens!("a\\\rb", [(Ident, 0..4)]);
-    lexeme!("a\\\rb", "ab");
+    tokens!("a\\\rb", [(name("ab"), 0..4)]);
 
     // consecutive line continuations
-    tokens!("a\\  \n\\   \r\\  \r\nb", [(Ident, 0..16)]);
-    lexeme!("a\\  \n\\   \r\\  \r\nb", "ab");
+    tokens!("a\\  \n\\   \r\\  \r\nb", [(name("ab"), 0..16)]);
     // le dernier `\` n'est pas une line continuation
     tokens!("a\\  \n\\   \r\\  b", [
-        (Ident, 0..1),
+        (name("a"), 0..1),
         (Unknown, 10..11),
-        (Ident, 13..14),
+        (name("b"), 13..14),
     ]);
 
     // pas une line continuation
     tokens!("a\\b", [
-        (Ident, 0..1),
+        (name("a"), 0..1),
         (Unknown, 1..2),
-        (Ident, 2..3),
+        (name("b"), 2..3),
     ]);
     tokens!("a\\   b\\   \n", [
-        (Ident, 0..1),
+        (name("a"), 0..1),
         (Unknown, 1..2),
-        (Ident, 5..6),
+        (name("b"), 5..6),
     ]);
     // fichier qui finit par un `\`
     tokens!("blabla\\", [
-        (Ident, 0..6),
+        (name("blabla"), 0..6),
         (Unknown, 6..7),
     ]);
 }
@@ -1196,8 +1091,8 @@ fn pp_number() {
 
     // pas un nombre
     tokens!("0x1'e+1", [(Number, 0..5), (Plus, 5..6), (Number, 6..7)]);
-    tokens!("a123", [(Ident, 0..4)]);
-    tokens!(".abcd", [(Dot, 0..1), (Ident, 1..5)]);
+    tokens!("a123", [(name("a123"), 0..4)]);
+    tokens!(".abcd", [(Dot, 0..1), (name("abcd"), 1..5)]);
     errors!("1'.5", [LexError::Unterminated(UnterminatedKind::Char, 1)]);
 
     // with line continuations and UCN

@@ -1,5 +1,7 @@
 //! ~ lexical analysis ~
 
+use crate::name::Name;
+use arrayvec::ArrayVec;
 use core::{num::IntErrorKind, str::Bytes};
 use std::{
     borrow::Cow,
@@ -9,8 +11,6 @@ use std::{
     ops::Range,
     str::Chars,
 };
-
-use arrayvec::ArrayVec;
 
 pub fn is_whitespace(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{B}' | '\u{C}')
@@ -53,6 +53,12 @@ fn encode_utf32(c: char, dst: &mut impl Extend<u8>) {
     dst.extend((c as u32).to_le_bytes());
 }
 
+/// récupère le lexème sous sa forme "traitée" (donc sans line continuations ni UCNs)
+/// `src_lexeme` correspond à la partie du texte brut dont on veut récupérer le
+/// lexème
+///
+/// pour les tokens de type `TokenKind::Name(name)`, on peut le récupérer directement
+/// avec `name.as_str()` donc pas besoin d'utiliser cette fonction dans ce cas
 pub fn extract_lexeme<'a>(kind: &TokenKind, src_lexeme: &'a str) -> Cow<'a, str> {
     match kind {
         TokenKind::Str(StrKind::Raw, ..) => extract_lexeme_raw_str(src_lexeme),
@@ -156,95 +162,7 @@ pub enum TokenKind {
     MinusMinus, // --
     Comma,      // ,
 
-    // pp keywords
-    Import,
-    Module,
-    Export,
-
-    // keywords
-    KwAlignas,
-    KwAlignof,
-    KwAsm,
-    KwAuto,
-    KwBool,
-    KwBreak,
-    KwCase,
-    KwCatch,
-    KwChar,
-    KwChar8T,
-    KwChar16T,
-    KwChar32T,
-    KwClass,
-    KwConcept,
-    KwConst,
-    KwConsteval,
-    KwConstexpr,
-    KwConstinit,
-    KwConstCast,
-    KwContinue,
-    KwContractAssert,
-    KwCoAwait,
-    KwCoReturn,
-    KwCoYield,
-    KwDecltype,
-    KwDefault,
-    KwDelete,
-    KwDo,
-    KwDouble,
-    KwDynamicCast,
-    KwElse,
-    KwEnum,
-    KwExplicit,
-    KwExtern,
-    KwFalse,
-    KwFloat,
-    KwFor,
-    KwFriend,
-    KwGoto,
-    KwIf,
-    KwInline,
-    KwInt,
-    KwLong,
-    KwMutable,
-    KwNamespace,
-    KwNew,
-    KwNoexcept,
-    KwNullptr,
-    KwOperator,
-    KwPrivate,
-    KwProtected,
-    KwPublic,
-    KwRegister,
-    KwReinterpretCast,
-    KwRequires,
-    KwReturn,
-    KwShort,
-    KwSigned,
-    KwSizeof,
-    KwStatic,
-    KwStaticAssert,
-    KwStaticCast,
-    KwStruct,
-    KwSwitch,
-    KwTemplate,
-    KwThis,
-    KwThreadLocal,
-    KwThrow,
-    KwTrue,
-    KwTry,
-    KwTypedef,
-    KwTypeid,
-    KwTypename,
-    KwUnion,
-    KwUnsigned,
-    KwUsing,
-    KwVirtual,
-    KwVoid,
-    KwVolatile,
-    KwWcharT,
-    KwWhile,
-
-    Ident,
+    Name(Name),
     Number,
     Char(Encoding, u32, Option<UdSuffix>),
     Multichar(u32, Option<UdSuffix>),
@@ -297,98 +215,10 @@ fn is_str_prefix(s: &str) -> bool {
     is_char_prefix(s) || matches!(s, "R" | "u8R" | "uR" | "UR" | "LR")
 }
 
-fn ident_to_kw(ident: &str) -> Option<TokenKind> {
+fn to_alt_token(s: &str) -> Option<TokenKind> {
     use TokenKind::*;
 
-    // todo: perfect hashing?
-    match ident {
-        "import" => Some(Import),
-        "module" => Some(Module),
-        "export" => Some(Export),
-
-        "alignas" => Some(KwAlignas),
-        "alignof" => Some(KwAlignof),
-        "asm" => Some(KwAsm),
-        "auto" => Some(KwAuto),
-        "bool" => Some(KwBool),
-        "break" => Some(KwBreak),
-        "case" => Some(KwCase),
-        "catch" => Some(KwCatch),
-        "char" => Some(KwChar),
-        "char8_t" => Some(KwChar8T),
-        "char16_t" => Some(KwChar16T),
-        "char32_t" => Some(KwChar32T),
-        "class" => Some(KwClass),
-        "concept" => Some(KwConcept),
-        "const" => Some(KwConst),
-        "consteval" => Some(KwConsteval),
-        "constexpr" => Some(KwConstexpr),
-        "constinit" => Some(KwConstinit),
-        "const_cast" => Some(KwConstCast),
-        "continue" => Some(KwContinue),
-        "contract_assert" => Some(KwContractAssert),
-        "co_await" => Some(KwCoAwait),
-        "co_return" => Some(KwCoReturn),
-        "co_yield" => Some(KwCoYield),
-        "decltype" => Some(KwDecltype),
-        "default" => Some(KwDefault),
-        "delete" => Some(KwDelete),
-        "do" => Some(KwDo),
-        "double" => Some(KwDouble),
-        "dynamic_cast" => Some(KwDynamicCast),
-        "else" => Some(KwElse),
-        "enum" => Some(KwEnum),
-        "explicit" => Some(KwExplicit),
-        "extern" => Some(KwExtern),
-        "false" => Some(KwFalse),
-        "float" => Some(KwFloat),
-        "for" => Some(KwFor),
-        "friend" => Some(KwFriend),
-        "goto" => Some(KwGoto),
-        "if" => Some(KwIf),
-        "inline" => Some(KwInline),
-        "int" => Some(KwInt),
-        "long" => Some(KwLong),
-        "mutable" => Some(KwMutable),
-        "namespace" => Some(KwNamespace),
-        "new" => Some(KwNew),
-        "noexcept" => Some(KwNoexcept),
-        "nullptr" => Some(KwNullptr),
-        "operator" => Some(KwOperator),
-        "private" => Some(KwPrivate),
-        "protected" => Some(KwProtected),
-        "public" => Some(KwPublic),
-        "register" => Some(KwRegister),
-        "reinterpret_cast" => Some(KwReinterpretCast),
-        "requires" => Some(KwRequires),
-        "return" => Some(KwReturn),
-        "short" => Some(KwShort),
-        "signed" => Some(KwSigned),
-        "sizeof" => Some(KwSizeof),
-        "static" => Some(KwStatic),
-        "static_assert" => Some(KwStaticAssert),
-        "static_cast" => Some(KwStaticCast),
-        "struct" => Some(KwStruct),
-        "switch" => Some(KwSwitch),
-        "template" => Some(KwTemplate),
-        "this" => Some(KwThis),
-        "thread_local" => Some(KwThreadLocal),
-        "throw" => Some(KwThrow),
-        "true" => Some(KwTrue),
-        "try" => Some(KwTry),
-        "typedef" => Some(KwTypedef),
-        "typeid" => Some(KwTypeid),
-        "typename" => Some(KwTypename),
-        "union" => Some(KwUnion),
-        "unsigned" => Some(KwUnsigned),
-        "using" => Some(KwUsing),
-        "virtual" => Some(KwVirtual),
-        "void" => Some(KwVoid),
-        "volatile" => Some(KwVolatile),
-        "wchar_t" => Some(KwWcharT),
-        "while" => Some(KwWhile),
-
-        // alternative tokens
+    match s {
         "and" => Some(AndAnd),
         "and_eq" => Some(AndEq),
         "bitand" => Some(And),
@@ -400,7 +230,6 @@ fn ident_to_kw(ident: &str) -> Option<TokenKind> {
         "or_eq" => Some(OrEq),
         "xor" => Some(Caret),
         "xor_eq" => Some(CaretEq),
-
         _ => None,
     }
 }
@@ -1333,7 +1162,7 @@ impl<'a> Lexer<'a> {
             Some('.') => Dot,
 
             Some(c) if c.is_ascii_digit() => self.number(),
-            Some(c) if is_ident_start(c) => self.ident_or_kw_or_prefix(),
+            Some(c) if is_ident_start(c) => self.name_or_prefix(),
 
             Some(_) => Unknown,
             None => Eof,
@@ -1416,7 +1245,7 @@ impl<'a> Lexer<'a> {
         (self.src.len() - self.chars.len()) as u32
     }
 
-    fn ident_or_kw_or_prefix(&mut self) -> TokenKind {
+    fn name_or_prefix(&mut self) -> TokenKind {
         debug_assert!(is_ident_start(self.prev));
 
         while is_ident_continue(self.peek(0)) {
@@ -1434,9 +1263,7 @@ impl<'a> Lexer<'a> {
                 self.bump();
                 self.str(&ident)
             }
-            // todo: peut-être qu'il vaut mieux laisser les keywords sous forme
-            // d'identifiers et les différencier plus tard
-            _ => ident_to_kw(&ident).unwrap_or(TokenKind::Ident),
+            _ => to_alt_token(&ident).unwrap_or_else(|| TokenKind::Name(Name::from(&ident))),
         }
     }
 
