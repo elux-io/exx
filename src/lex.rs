@@ -788,7 +788,6 @@ pub enum LexError {
     Str(StrError, Range<u32>),
     Unterminated(UnterminatedKind, u32),
     Escape(EscapeError, Range<u32>),
-    NumericEscapeOutOfRange(Range<u32>),
     UnexpectedBasicUcn {
         c: char,
         is_control: bool,
@@ -822,7 +821,8 @@ pub enum StrError {
 #[derive(Clone, PartialEq, Debug)]
 pub enum EscapeError {
     UnknownEscape,
-    ExpectedDigits { n: u32, base: u32 },
+    OutOfRange,
+    ExpectedHexDigits(u32),
     ExpectedOpenBrace,
     ExpectedOpenBraceOrHexDigit,
     NoCloseBrace,
@@ -838,23 +838,23 @@ enum EscapeSeqKind {
     Numeric,
 }
 
-fn eat_escape_seq(chars: &mut SkipLineCont) -> Option<Result<(u128, EscapeSeqKind), EscapeError>> {
+fn eat_escape_seq(chars: &mut SkipLineCont) -> Option<Result<(u32, EscapeSeqKind), EscapeError>> {
     use EscapeSeqKind::*;
 
     let mut it = chars.clone();
     if it.next() == Some('\\') {
         let res = match it.next() {
-            Some('n') => Ok(('\n' as u128, Simple)),
-            Some('r') => Ok(('\r' as u128, Simple)),
-            Some('t') => Ok(('\t' as u128, Simple)),
-            Some('v') => Ok(('\u{B}' as u128, Simple)),
-            Some('f') => Ok(('\u{C}' as u128, Simple)),
-            Some('a') => Ok(('\u{7}' as u128, Simple)),
-            Some('b') => Ok(('\u{8}' as u128, Simple)),
-            Some('\\') => Ok(('\\' as u128, Simple)),
-            Some('?') => Ok(('?' as u128, Simple)),
-            Some('\'') => Ok(('\'' as u128, Simple)),
-            Some('"') => Ok(('"' as u128, Simple)),
+            Some('n') => Ok(('\n' as u32, Simple)),
+            Some('r') => Ok(('\r' as u32, Simple)),
+            Some('t') => Ok(('\t' as u32, Simple)),
+            Some('v') => Ok(('\u{B}' as u32, Simple)),
+            Some('f') => Ok(('\u{C}' as u32, Simple)),
+            Some('a') => Ok(('\u{7}' as u32, Simple)),
+            Some('b') => Ok(('\u{8}' as u32, Simple)),
+            Some('\\') => Ok(('\\' as u32, Simple)),
+            Some('?') => Ok(('?' as u32, Simple)),
+            Some('\'') => Ok(('\'' as u32, Simple)),
+            Some('"') => Ok(('"' as u32, Simple)),
 
             Some('o') => {
                 if it.clone().next() == Some('{') {
@@ -866,7 +866,7 @@ fn eat_escape_seq(chars: &mut SkipLineCont) -> Option<Result<(u128, EscapeSeqKin
 
             Some('x') => {
                 let digits = match it.clone().next() {
-                    Some(c) if c.is_ascii_hexdigit() => eat_digits(&mut it, None, 16),
+                    Some(c) if c.is_ascii_hexdigit() => eat_hex_digits(&mut it, None),
                     Some('{') => eat_digits_in_braces(&mut it, 16),
                     _ => Err(EscapeError::ExpectedOpenBraceOrHexDigit),
                 };
@@ -875,11 +875,11 @@ fn eat_escape_seq(chars: &mut SkipLineCont) -> Option<Result<(u128, EscapeSeqKin
             }
 
             Some(c) if let Some(digit) = c.to_digit(8) => {
-                let mut value = digit as u128;
+                let mut value = digit;
                 for _ in 0..2 {
                     if let Some(digit) = it.clone().next().and_then(|c| c.to_digit(8)) {
                         it.next();
-                        value = value * 8 + digit as u128;
+                        value = value * 8 + digit;
                     } else {
                         break;
                     }
@@ -900,17 +900,22 @@ fn eat_escape_seq(chars: &mut SkipLineCont) -> Option<Result<(u128, EscapeSeqKin
     }
 }
 
-fn eat_digits(chars: &mut SkipLineCont, n: Option<u32>, base: u32) -> Result<u128, EscapeError> {
+fn eat_hex_digits(chars: &mut SkipLineCont, n: Option<u32>) -> Result<u32, EscapeError> {
+    let base = 16;
     let mut it = chars.clone();
-    let mut value = 0;
+    let mut value = 0u32;
     let max = n.unwrap_or(u32::MAX);
     for _ in 0..max {
         if let Some(digit) = it.clone().next().and_then(|c| c.to_digit(base)) {
             it.next();
-            value = value * base as u128 + digit as u128;
+            if let Some(v) = value.checked_mul(base).and_then(|v| v.checked_add(digit)) {
+                value = v;
+            } else {
+                return Err(EscapeError::OutOfRange);
+            }
         } else {
             if let Some(n) = n {
-                return Err(EscapeError::ExpectedDigits { n, base });
+                return Err(EscapeError::ExpectedHexDigits(n));
             }
             break;
         }
@@ -920,12 +925,13 @@ fn eat_digits(chars: &mut SkipLineCont, n: Option<u32>, base: u32) -> Result<u12
     Ok(value)
 }
 
-fn eat_digits_in_braces(chars: &mut SkipLineCont, base: u32) -> Result<u128, EscapeError> {
+fn eat_digits_in_braces(chars: &mut SkipLineCont, base: u32) -> Result<u32, EscapeError> {
     let mut it = chars.clone();
-    let mut value = 0;
+    let mut value = 0u32;
     let mut empty = true;
     let mut invalid_digit = false;
     let mut saw_close_brace = false;
+    let mut overflow = false;
 
     debug_assert_eq!(it.clone().next(), Some('{'));
     it.next();
@@ -941,7 +947,11 @@ fn eat_digits_in_braces(chars: &mut SkipLineCont, base: u32) -> Result<u128, Esc
             }
             Some(c) if let Some(digit) = c.to_digit(base) => {
                 empty = false;
-                value = value * base as u128 + digit as u128
+                if let Some(v) = value.checked_mul(base).and_then(|v| v.checked_add(digit)) {
+                    value = v;
+                } else {
+                    overflow = true;
+                }
             }
             Some(_) => invalid_digit = true,
             None => break,
@@ -954,17 +964,16 @@ fn eat_digits_in_braces(chars: &mut SkipLineCont, base: u32) -> Result<u128, Esc
     if invalid_digit {
         return Err(EscapeError::InvalidDigitInBraces { base });
     }
+    if overflow {
+        return Err(EscapeError::OutOfRange);
+    }
 
     *chars = it;
     Ok(value)
 }
 
 fn eat_ucn(chars: &mut SkipLineCont) -> Option<Result<char, EscapeError>> {
-    let value_to_char = |v| {
-        u32::try_from(v)
-            .map_err(|_| EscapeError::InvalidUcnValue)
-            .and_then(|v| char::from_u32(v).ok_or(EscapeError::InvalidUcnValue))
-    };
+    let value_to_char = |v| char::from_u32(v).ok_or(EscapeError::InvalidUcnValue);
 
     let mut it = chars.clone();
     if it.next() == Some('\\') {
@@ -973,13 +982,13 @@ fn eat_ucn(chars: &mut SkipLineCont) -> Option<Result<char, EscapeError>> {
                 let digits = if it.clone().next() == Some('{') {
                     eat_digits_in_braces(&mut it, 16)
                 } else {
-                    eat_digits(&mut it, Some(4), 16)
+                    eat_hex_digits(&mut it, Some(4))
                 };
 
                 digits.and_then(value_to_char)
             }
 
-            Some('U') => eat_digits(&mut it, Some(8), 16).and_then(value_to_char),
+            Some('U') => eat_hex_digits(&mut it, Some(8)).and_then(value_to_char),
 
             Some('N') => {
                 if it.next() == Some('{') {
@@ -1586,12 +1595,13 @@ impl<'a> Lexer<'a> {
                     let mut has_escape_error = false;
                     if kind == EscapeSeqKind::Numeric {
                         let max = match encoding {
-                            Encoding::Ordinary | Encoding::Utf8 => u8::MAX as u128,
-                            Encoding::Wide | Encoding::Utf16 => u16::MAX as u128,
-                            Encoding::Utf32 => u32::MAX as u128,
+                            Encoding::Ordinary | Encoding::Utf8 => u8::MAX as u32,
+                            Encoding::Wide | Encoding::Utf16 => u16::MAX as u32,
+                            Encoding::Utf32 => u32::MAX,
                         };
                         if v > max {
-                            self.errors.push(LexError::NumericEscapeOutOfRange(
+                            self.errors.push(LexError::Escape(
+                                EscapeError::OutOfRange,
                                 escape_start..escape_start + 1,
                             ));
                             has_escape_error = true;

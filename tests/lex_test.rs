@@ -389,14 +389,14 @@ fn char() {
     // todo: peut-être qu'on voudrait afficher l'erreur too many chars car
     // on voit bien qu'à part l'escape invalide il y avait 5 chars valides et donc
     // dans tous les cas ça dépasse le nombre de chars autorisés dans un multichar
-    errors!("'abcde\\xFFFF'", [LexError::NumericEscapeOutOfRange(6..7)]);
+    errors!("'abcde\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, 6..7)]);
     // l'escape sequence est invalide donc on la considère caractère par caractère
     // mais on n'affiche pas l'erreur too many chars pour autant car on considère
     // que le mec n'a pas voulu faire un multichar (juste un char, qui se trouve
     // être invalide)
-    errors!("'\\xFFFF'", [LexError::NumericEscapeOutOfRange(1..2)]);
+    errors!("'\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
     // todo: on n'affiche pas l'erreur multichar prefix mais peut-être qu'on devrait?
-    errors!("u8'\\75\\xFFFF'", [LexError::NumericEscapeOutOfRange(6..7)]);
+    errors!("u8'\\75\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, 6..7)]);
 
     // empty
     // quand on rencontre un caractère vide, on note l'erreur et on le remplace
@@ -414,27 +414,27 @@ fn char() {
 
     // out of range octal escape sequences
     tokens!(r"'\377'", [(Char(Encoding::Ordinary, 255, None), 0..6)]);
-    errors!(r"'\400'", [LexError::NumericEscapeOutOfRange(1..2)]);
+    errors!(r"'\400'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
     tokens!(r"u8'\377'", [(Char(Encoding::Utf8, 255, None), 0..8)]);
-    errors!(r"u8'\400'", [LexError::NumericEscapeOutOfRange(3..4)]);
+    errors!(r"u8'\400'", [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
     tokens!(r"L'\o{177777}'", [(Char(Encoding::Wide, 65_535, None), 0..13)]);
-    errors!(r"L'\o{200000}'", [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r"L'\o{200000}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r"u'\o{177777}'", [(Char(Encoding::Utf16, 65_535, None), 0..13)]);
-    errors!(r"u'\o{200000}'", [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r"u'\o{200000}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r"U'\o{37777777777}'", [(Char(Encoding::Utf32, 4_294_967_295, None), 0..18)]);
-    errors!(r"U'\o{40000000000}'", [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r"U'\o{40000000000}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
 
     // out of range hex escape sequences
     tokens!(r"'\xFF'", [(Char(Encoding::Ordinary, 255, None), 0..6)]);
-    errors!(r"'\x100'", [LexError::NumericEscapeOutOfRange(1..2)]);
+    errors!(r"'\x100'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
     tokens!(r"u8'\xFF'", [(Char(Encoding::Utf8, 255, None), 0..8)]);
-    errors!(r"u8'\x100'", [LexError::NumericEscapeOutOfRange(3..4)]);
+    errors!(r"u8'\x100'", [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
     tokens!(r"L'\xFFFF'", [(Char(Encoding::Wide, 65_535, None), 0..9)]);
-    errors!(r"L'\x10000'", [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r"L'\x10000'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r"u'\xFFFF'", [(Char(Encoding::Utf16, 65_535, None), 0..9)]);
-    errors!(r"u'\x10000'", [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r"u'\x10000'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r"U'\xFFFFFFFF'", [(Char(Encoding::Utf32, 4_294_967_295, None), 0..13)]);
-    errors!(r"U'\x100000000'", [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r"U'\x100000000'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
 
     // invalid escape sequence (on note l'erreur mais on interprète caractère par
     // caractère pour pouvoir continuer le lexing)
@@ -629,27 +629,27 @@ fn str() {
 
     // out of range octal escape sequences
     tokens!(r#""\377""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, u8_bytes(255), None), 0..6)]);
-    errors!(r#""\400""#, [LexError::NumericEscapeOutOfRange(1..2)]);
+    errors!(r#""\400""#, [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
     tokens!(r#"u8"\377""#, [(Str(StrKind::NonRaw, Encoding::Utf8, u8_bytes(255), None), 0..8)]);
-    errors!(r#"u8"\400""#, [LexError::NumericEscapeOutOfRange(3..4)]);
+    errors!(r#"u8"\400""#, [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
     tokens!(r#"L"\o{177777}""#, [(Str(StrKind::NonRaw, Encoding::Wide, u16_bytes(65_535), None), 0..13)]);
-    errors!(r#"L"\o{200000}""#, [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r#"L"\o{200000}""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r#"u"\o{177777}""#, [(Str(StrKind::NonRaw, Encoding::Utf16, u16_bytes(65_535), None), 0..13)]);
-    errors!(r#"u"\o{200000}""#, [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r#"u"\o{200000}""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r#"U"\o{37777777777}""#, [(Str(StrKind::NonRaw, Encoding::Utf32, u32_bytes(4_294_967_295), None), 0..18)]);
-    errors!(r#"U"\o{40000000000}""#, [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r#"U"\o{40000000000}""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
 
     // out of range hex escape sequences
     tokens!(r#""\xFF""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, u8_bytes(255), None), 0..6)]);
-    errors!(r#""\x100""#, [LexError::NumericEscapeOutOfRange(1..2)]);
+    errors!(r#""\x100""#, [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
     tokens!(r#"u8"\xFF""#, [(Str(StrKind::NonRaw, Encoding::Utf8, u8_bytes(255), None), 0..8)]);
-    errors!(r#"u8"\x100""#, [LexError::NumericEscapeOutOfRange(3..4)]);
+    errors!(r#"u8"\x100""#, [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
     tokens!(r#"L"\xFFFF""#, [(Str(StrKind::NonRaw, Encoding::Wide, u16_bytes(65_535), None), 0..9)]);
-    errors!(r#"L"\x10000""#, [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r#"L"\x10000""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r#"u"\xFFFF""#, [(Str(StrKind::NonRaw, Encoding::Utf16, u16_bytes(65_535), None), 0..9)]);
-    errors!(r#"u"\x10000""#, [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r#"u"\x10000""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
     tokens!(r#"U"\xFFFFFFFF""#, [(Str(StrKind::NonRaw, Encoding::Utf32, u32_bytes(4_294_967_295), None), 0..13)]);
-    errors!(r#"U"\x100000000""#, [LexError::NumericEscapeOutOfRange(2..3)]);
+    errors!(r#"U"\x100000000""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
 
     // with line continuations and UCN
     tokens!("u\\\n8\"a\\\nb\\u00E9\\\n\"\\\n_a\\u00E9bc", [(Str(StrKind::NonRaw, Encoding::Utf8, to_utf8("abé"), Some(NonZeroU32::new(8).unwrap())), 0..30)]);
@@ -887,6 +887,11 @@ fn numeric_escape_seq() {
     errors!(r"'\x{ABS}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
     errors!(r"'\x{A+B}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
 
+    // out of range
+    errors!(r"'\o{7777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777}'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!(r"'\xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!(r"'\x{FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF}'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+
     // on ne peut pas utiliser des UCN pour former une escape sequence
     // `\u0033` == `3` donc teste que ce n'est pas `\613` ni `\x313`
     tokens!(r#""\61\u0033""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("13"), None), 0..11)]);
@@ -958,14 +963,14 @@ fn ucn() {
     tokens!(r"U'\U0010FFFF'", [(Char(Encoding::Utf32, 0x10FFFF, None), 0..13)]);
     errors!(r"U'\U00110000'", [LexError::Escape(EscapeError::InvalidUcnValue, 2..3)]);
     errors!(r"U'\UFFFFFFFF'", [LexError::Escape(EscapeError::InvalidUcnValue, 2..3)]);
-    errors!(r"U'\u{FFFFFFFFFFFFFFFFFFFFFFF}'", [LexError::Escape(EscapeError::InvalidUcnValue, 2..3)]);
+    errors!(r"U'\u{FFFFFFFFFFFFFFFFFFFFFFF}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
 
     // incomplete
-    errors!(r"'\u000'", [LexError::Escape(EscapeError::ExpectedDigits { n: 4, base: 16 }, 1..2)]);
-    errors!(r"'\up'", [LexError::Escape(EscapeError::ExpectedDigits { n: 4, base: 16 }, 1..2)]);
-    errors!(r"'\Up'", [LexError::Escape(EscapeError::ExpectedDigits { n: 8, base: 16 }, 1..2)]);
-    errors!(r"'\u000X'", [LexError::Escape(EscapeError::ExpectedDigits { n: 4, base: 16 }, 1..2)]);
-    errors!(r"'\U0000000X'", [LexError::Escape(EscapeError::ExpectedDigits { n: 8, base: 16 }, 1..2)]);
+    errors!(r"'\u000'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
+    errors!(r"'\up'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
+    errors!(r"'\Up'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), 1..2)]);
+    errors!(r"'\u000X'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
+    errors!(r"'\U0000000X'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), 1..2)]);
     // incomplete named ucn
     errors!(r"\N", [LexError::Escape(EscapeError::ExpectedOpenBrace, 0..1)]);
     errors!(r"\N{", [LexError::Escape(EscapeError::NoCloseBrace, 0..1)]);
@@ -1004,18 +1009,18 @@ fn ucn() {
     // les ucns invalides sont interprétés caractère par caractère
     tokens_and_errors!(r"ab\uCD",
         [(name("ab"), 0..2), (Unknown, 2..3), (name("uCD"), 3..6)],
-        [LexError::Escape(EscapeError::ExpectedDigits { n: 4, base: 16 }, 2..3)]
+        [LexError::Escape(EscapeError::ExpectedHexDigits(4), 2..3)]
     );
 
     // on ne peut pas utiliser des UCN pour former un UCN
     // `\u0061` == `a`
     tokens!(r"'\u000a'", [(Char(Encoding::Ordinary, '\n' as u32, None), 0..8)]);
-    errors!(r"'\u000\u0061'", [LexError::Escape(EscapeError::ExpectedDigits { n: 4, base: 16 }, 1..2)]);
+    errors!(r"'\u000\u0061'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
     tokens!(r"'\U0000000a'", [(Char(Encoding::Ordinary, '\n' as u32, None), 0..12)]);
-    errors!(r"'\U0000000\u0061'", [LexError::Escape(EscapeError::ExpectedDigits { n: 8, base: 16 }, 1..2)]);
+    errors!(r"'\U0000000\u0061'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), 1..2)]);
     // `\u007B` == `{`
     tokens!(r"'\u{0000}'", [(Char(Encoding::Ordinary, '\0' as u32, None), 0..10)]);
-    errors!(r"'\u\u007B0000}'", [LexError::Escape(EscapeError::ExpectedDigits { n: 4, base: 16 }, 1..2)]);
+    errors!(r"'\u\u007B0000}'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
     tokens!(r"'\N{LATIN SMALL LETTER A}'", [(Char(Encoding::Ordinary, 'a' as u32, None), 0..26)]);
     errors!(r"'\N\u007BLATIN SMALL LETTER A}'", [LexError::Escape(EscapeError::ExpectedOpenBrace, 1..2)]);
 
