@@ -881,7 +881,20 @@ fn numeric_escape_seq() {
     errors!(r"'\o{}'", [LexError::Escape(EscapeError::EmptyBraces, 1..2)]);
     errors!(r"'\x{}'", [LexError::Escape(EscapeError::EmptyBraces, 1..2)]);
 
+    // doesn't go beyond the char or str (otherwise the error would be "invalid digit"
+    // which is dumb)
+    errors!(r"'\o{'}", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r"'\x{'}", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    // in str
+    errors!(r#""\o{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r#""\x{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+
     // invalid digit
+    // technically the grammar says that there can only be hex or oct digits inside
+    // braces so maybe we should stop at the first wrong digit and say that the
+    // escape is not terminated but it's not a very good error message so we still
+    // eat until the `}` and say that it contains an invalid digit (Clang also does
+    // that, GCC and MSVC do the dumb error message)
     errors!(r"'\o{128}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
     errors!(r"'\o{12A}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
     errors!(r"'\o{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
@@ -979,6 +992,34 @@ fn ucn() {
     // inside char
     errors!(r"'\N'", [LexError::Escape(EscapeError::ExpectedOpenBrace, 1..2)]);
     errors!(r"'\N{'", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+
+    // doesn't go beyond the char or str
+    errors!(r"'\u{'}", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r#""\u{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    // same if the ucn is outside a char/str
+    errors!(r"\u{'}", [
+        LexError::Escape(EscapeError::NoCloseBrace, 0..1),
+        LexError::Unterminated(UnterminatedKind::Char, 3),
+    ]);
+    errors!(r#"\u{"}"#, [
+        LexError::Escape(EscapeError::NoCloseBrace, 0..1),
+        LexError::Unterminated(UnterminatedKind::Str, 3),
+    ]);
+
+    // but the named ucn eats everything, whether it is in a char/str or not
+    // todo: maybe not do that?
+    errors!(r"'\N{'}", [LexError::Escape(EscapeError::InvalidUcnName, 1..2)]);
+    errors!(r#""\N{"}"#, [LexError::Escape(EscapeError::InvalidUcnName, 1..2)]);
+    // todo: the "unterminated" error is a bit dumb because the named ucn is
+    // supposed to eat everything inside {}
+    errors!(r"\N{'}", [
+        LexError::Escape(EscapeError::InvalidUcnName, 0..1),
+        LexError::Unterminated(UnterminatedKind::Char, 3),
+    ]);
+    errors!(r#"\N{"}"#, [
+        LexError::Escape(EscapeError::InvalidUcnName, 0..1),
+        LexError::Unterminated(UnterminatedKind::Str, 3),
+    ]);
 
     // empty braces
     errors!(r"\u{}", [LexError::Escape(EscapeError::EmptyBraces, 0..1)]);
