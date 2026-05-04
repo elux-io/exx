@@ -953,7 +953,10 @@ fn eat_digits_in_braces(chars: &mut SkipLineCont, base: u32) -> Result<u32, Esca
                     overflow = true;
                 }
             }
-            Some(_) => invalid_digit = true,
+            Some(_) => {
+                empty = false;
+                invalid_digit = true;
+            }
             None => break,
         }
     }

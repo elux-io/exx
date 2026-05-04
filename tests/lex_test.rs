@@ -884,8 +884,10 @@ fn numeric_escape_seq() {
     // invalid digit
     errors!(r"'\o{128}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
     errors!(r"'\o{12A}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
+    errors!(r"'\o{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
     errors!(r"'\x{ABS}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
     errors!(r"'\x{A+B}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
+    errors!(r"'\x{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
 
     // out of range
     errors!(r"'\o{7777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777}'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
@@ -984,6 +986,7 @@ fn ucn() {
 
     // invalid digit in braces
     errors!(r"'\u{EP}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
+    errors!(r"'\u{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
 
     // les UCNs en dehors d'un char ou str ne peuvent pas désigner un caractère
     // de contrôle ou un caractère du basic character set, dans ce cas on note
