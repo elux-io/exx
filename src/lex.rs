@@ -1433,8 +1433,10 @@ impl<'a> Lexer<'a> {
                     if matches!(c, ' ' | ')' | '\\' | '\t' | '\u{B}' | '\u{C}')
                         || !is_basic_charset(c)
                     {
-                        self.errors
-                            .push(LexError::Str(StrError::InvalidCharInDelim, pos..pos + 1));
+                        self.errors.push(LexError::Str(
+                            StrError::InvalidCharInDelim,
+                            pos..pos + c.len_utf8() as u32,
+                        ));
                         invalid_char_in_delim = true;
                         break;
                     }

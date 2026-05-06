@@ -698,8 +698,8 @@ fn raw_str() {
     errors!(r#"R"de im(abc)de im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
     errors!(r#"R"de\im(abc)de\im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
     errors!(r#"R"de)im(abc)de)im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!(r#"R"délim(abc)délim""#, [LexError::Str(StrError::InvalidCharInDelim, 3..4)]);
-    errors!(r#"R"d🤡lim(abc)d🤡lim""#, [LexError::Str(StrError::InvalidCharInDelim, 3..4)]);
+    errors!(r#"R"délim(abc)délim""#, [LexError::Str(StrError::InvalidCharInDelim, 3..5)]);
+    errors!(r#"R"d🤡lim(abc)d🤡lim""#, [LexError::Str(StrError::InvalidCharInDelim, 3..7)]);
     // line continuations and UCN are not allowed in delim
     errors!("R\"d\\\nelim(abc)d\\\nelim\"", [LexError::Str(StrError::InvalidCharInDelim, 3..4)]);
     errors!(r#"R"de\u0061im(abc)de\u0061im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
