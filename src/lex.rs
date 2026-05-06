@@ -1613,7 +1613,7 @@ impl<'a> Lexer<'a> {
                     };
 
                     Some(StrChar {
-                        value: v as u32,
+                        value: v,
                         is_numeric_escape: kind == EscapeSeqKind::Numeric,
                         is_invalid_escape: has_escape_error,
                     })
