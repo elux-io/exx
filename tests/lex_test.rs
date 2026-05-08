@@ -378,11 +378,7 @@ fn char() {
         (Multichar(24930, None), 1..5),
     ]);
     // invalid chars
-    // todo: more precise location
-    errors!(r"'aéô'", [
-        LexError::Char(CharError::NonAsciiInMultichar, 0..7),
-        LexError::Char(CharError::NonAsciiInMultichar, 0..7),
-    ]);
+    errors!(r"'aéô'", [LexError::Char(CharError::NonAsciiInMultichar, 0..7)]);
     // with multiple numeric escapes
     tokens!("'\\75\\76'", [(Multichar(15678, None), 0..8)]);
     // too many chars et invalid escape

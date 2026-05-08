@@ -1371,6 +1371,7 @@ impl<'a> Lexer<'a> {
                             CharError::NonAsciiInMultichar,
                             self.start..self.pos(),
                         ));
+                        break;
                     }
                 }
 
