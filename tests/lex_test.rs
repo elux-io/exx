@@ -958,6 +958,14 @@ fn ucn() {
     tokens!(r"u'\u{e9}'", [(Char(Encoding::Utf16, 'é' as u32, None), 0..9)]);
     tokens!(r"U'\N{GRINNING FACE}'", [(Char(Encoding::Utf32, '😀' as u32, None), 0..20)]);
     errors!(r"U'\N{grinning face}'", [LexError::Escape(EscapeError::InvalidUcnName, 2..3)]);
+    errors!(r"U'\N{+}'", [LexError::Escape(EscapeError::InvalidUcnName, 2..3)]);
+    // todo: le ucn invalide est interprété caractère par caractère donc c'est aussi
+    // considéré comme un multichar (avec un caractère invalide) mais peut-être
+    // qu'on veut pas
+    errors!(r"U'\N{🤡}'", [
+        LexError::Escape(EscapeError::InvalidUcnName, 2..3),
+        LexError::Char(CharError::NonAsciiInMultichar, 0..11),
+    ]);
 
     // followed by something
     tokens!(r#""\u00E9A""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("éA"), None), 0..9)]);
