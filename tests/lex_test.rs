@@ -33,8 +33,8 @@ macro_rules! tokens_and_errors {
         {
             let mut lexer = Lexer::new($src);
             let mut tokens = Vec::new();
-            while let (kind, span) = lexer.lex() && kind != TokenKind::Eof {
-                tokens.push((kind, span));
+            while let (kind, range) = lexer.lex() && kind != TokenKind::Eof {
+                tokens.push((kind, range));
             }
 
             let expected_errors = [$($error,)*];
@@ -52,13 +52,13 @@ macro_rules! lexeme {
         {
             let mut lexer = Lexer::new($src);
             let mut tokens = Vec::new();
-            while let (kind, span) = lexer.lex() && kind != TokenKind::Eof {
-                tokens.push((kind, span));
+            while let (kind, range) = lexer.lex() && kind != TokenKind::Eof {
+                tokens.push((kind, range));
             }
             assert_eq!(tokens.len(), 1);
 
-            let (kind, span) = &tokens[0];
-            let actual = extract_lexeme(kind, &$src[span.start as usize..span.end as usize]);
+            let (kind, range) = &tokens[0];
+            let actual = extract_lexeme(kind, &$src[range.start as usize..range.end as usize]);
             assert_eq!(actual, $expected);
         }
     };
@@ -450,7 +450,7 @@ fn char() {
     // on se retrouve donc avec le caractère 'a' pour la suite du lexing
     tokens_and_errors!(r"\u0027a'",
         [(Char(Encoding::Ordinary, 'a' as u32, None), 0..8)],
-        [LexError::UnexpectedBasicUcn { c: '\'', is_control: false, span: 0..1 }]
+        [LexError::UnexpectedBasicUcn { c: '\'', is_control: false, range: 0..1 }]
     );
 
     // user-defined suffix
@@ -593,7 +593,7 @@ fn str() {
     // quand même que c'est un `"` pour continuer le lexing
     tokens_and_errors!(r#"\u0022a""#,
         [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("a"), None), 0..8)],
-        [LexError::UnexpectedBasicUcn { c: '\"', is_control: false, span: 0..1 }]
+        [LexError::UnexpectedBasicUcn { c: '\"', is_control: false, range: 0..1 }]
     );
 
     // ne peut pas contenir de newline
@@ -1033,17 +1033,17 @@ fn ucn() {
     // `\u0041` == `A`
     tokens_and_errors!(r"ab\u0041c",
         [(name("abAc"), 0..9)],
-        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, span: 2..3 }]
+        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, range: 2..3 }]
     );
 
     tokens_and_errors!(r"ab\u0001c",
         [(name("ab"), 0..2), (Unknown, 2..8), (name("c"), 8..9)],
-        [LexError::UnexpectedBasicUcn { c: '\u{1}', is_control: true, span: 2..3 }]
+        [LexError::UnexpectedBasicUcn { c: '\u{1}', is_control: true, range: 2..3 }]
     );
 
     tokens_and_errors!(r"\u0041",
         [(name("A"), 0..6)],
-        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, span: 0..1 }]
+        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, range: 0..1 }]
     );
 
     // les ucns invalides sont interprétés caractère par caractère

@@ -791,7 +791,7 @@ pub enum LexError {
     UnexpectedBasicUcn {
         c: char,
         is_control: bool,
-        span: Range<u32>,
+        range: Range<u32>,
     },
 }
 
@@ -1192,9 +1192,9 @@ impl<'a> Lexer<'a> {
                     self.errors.push(LexError::UnexpectedBasicUcn {
                         c,
                         is_control: c.is_control(),
-                        // todo: ça serait mieux d'avoir le span de l'UCN en lui-même
+                        // todo: ça serait mieux d'avoir le range de l'UCN en lui-même
                         // et pas juste le premier caractère
-                        span: ucn_start..ucn_start + 1,
+                        range: ucn_start..ucn_start + 1,
                     });
                 }
                 Some(c)
