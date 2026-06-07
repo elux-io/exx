@@ -26,6 +26,7 @@ approach full conformance with the arcane dictates of the ISO C++ Standard.
 - ✅ Keywords
 - ✅ Comments
 - ✅ Operators & punctuators
+- ✅ Header names
 - Literals
   - ✅ Integer
   - ✅ Floating-point

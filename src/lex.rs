@@ -62,6 +62,7 @@ fn encode_utf32(c: char, dst: &mut impl Extend<u8>) {
 pub fn extract_lexeme<'a>(kind: &TokenKind, src_lexeme: &'a str) -> Cow<'a, str> {
     match kind {
         TokenKind::Str(StrKind::Raw, ..) => extract_lexeme_raw_str(src_lexeme),
+        TokenKind::Header(_) => extract_lexeme_header(src_lexeme),
         _ => extract_lexeme_basic(src_lexeme),
     }
 }
@@ -69,6 +70,15 @@ pub fn extract_lexeme<'a>(kind: &TokenKind, src_lexeme: &'a str) -> Cow<'a, str>
 fn extract_lexeme_basic(src_lexeme: &str) -> Cow<'_, str> {
     if src_lexeme.contains('\\') {
         Cow::Owned(remove_line_conts_and_decode_ucns(src_lexeme))
+    } else {
+        Cow::Borrowed(src_lexeme)
+    }
+}
+
+fn extract_lexeme_header(src_lexeme: &str) -> Cow<'_, str> {
+    if src_lexeme.contains('\\') {
+        let raw = src_lexeme.chars();
+        Cow::Owned(SkipLineCont { raw }.collect())
     } else {
         Cow::Borrowed(src_lexeme)
     }
@@ -99,6 +109,12 @@ fn extract_lexeme_raw_str(raw_str: &str) -> Cow<'_, str> {
     } else {
         Cow::Borrowed(raw_str)
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum HeaderKind {
+    Angle,
+    Quote,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -169,6 +185,7 @@ pub enum TokenKind {
     // todo: le ByteString ça serait bien de l'interner...
     // ou alors ne pas le stocker ici et extraire la valeur plus tard ?
     Str(StrKind, Encoding, ByteString, Option<UdSuffix>),
+    Header(HeaderKind),
 
     Eof,
     Unknown,
@@ -1191,6 +1208,31 @@ impl<'a> Lexer<'a> {
         self.eat_whitespace();
 
         (kind, self.start..end)
+    }
+
+    pub fn lex_header_name(&mut self) -> Option<(TokenKind, Range<u32>)> {
+        let mut it = self.chars.clone();
+        let (kind, end_char) = match it.next() {
+            Some('<') => (HeaderKind::Angle, '>'),
+            Some('"') => (HeaderKind::Quote, '"'),
+            _ => return None,
+        };
+
+        loop {
+            if eat_newline(&mut it) {
+                return None;
+            }
+            if it.next()? == end_char {
+                break;
+            }
+        }
+
+        let start = self.pos();
+        self.chars = it;
+        let end = self.pos();
+        self.eat_whitespace();
+
+        Some((TokenKind::Header(kind), start..end))
     }
 
     pub fn bump(&mut self) -> Option<char> {

@@ -1484,6 +1484,74 @@ fn float_literal() {
 }
 
 #[test]
+fn header_name() {
+    let src = r#"
+        <salut>
+        "salut"
+    "#;
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), Some((Header(HeaderKind::Angle), 9..16)));
+    assert_eq!(lexer.lex_header_name(), Some((Header(HeaderKind::Quote), 25..32)));
+
+    // pas un header name car contient un newline
+    let src = "
+        <salut
+            >
+    ";
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), None);
+
+    let src = r#"
+        "salut
+            "
+    "#;
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), None);
+
+    // pas un header name car non terminé
+    let src = "
+        <salut
+    ";
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), None);
+
+    let src = r#"
+        "salut
+    "#;
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), None);
+
+    let src = r#"
+        <salut"
+    "#;
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), None);
+
+    let src = r#"
+        "salut>
+    "#;
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), None);
+
+    // si on veut lexer un header name mais que le prochain token n'en est pas un,
+    // le lexer n'avance pas
+    let src = "+";
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), None);
+    assert_eq!(lexer.lex(), (Plus, 0..1));
+
+    // avec des tokens après
+    let src = "
+        <salut> a
+      /*  */      b
+    ";
+    let mut lexer = Lexer::new(src);
+    assert_eq!(lexer.lex_header_name(), Some((Header(HeaderKind::Angle), 9..16)));
+    assert_eq!(lexer.lex(), (name("a"), 17..18));
+    assert_eq!(lexer.lex(), (name("b"), 37..38));
+}
+
+#[test]
 fn bol() {
     let lexer = Lexer::new("");
     assert!(lexer.at_bol());
