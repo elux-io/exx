@@ -1046,6 +1046,7 @@ pub struct Lexer<'a> {
     src: &'a str,
     chars: SkipLineCont<'a>,
     start: u32,
+    at_bol: bool,
     errors: Vec<LexError>,
     #[cfg(debug_assertions)]
     prev: char,
@@ -1053,14 +1054,19 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Self {
-        Self {
+        let mut lexer = Self {
             src,
             chars: SkipLineCont { raw: src.chars() },
             start: 0,
+            at_bol: false,
             errors: Vec::new(),
             #[cfg(debug_assertions)]
             prev: '\0',
-        }
+        };
+
+        lexer.eat_whitespace();
+        lexer.at_bol = true;
+        lexer
     }
 
     pub fn errors(&self) -> &Vec<LexError> {
@@ -1181,7 +1187,10 @@ impl<'a> Lexer<'a> {
             None => Eof,
         };
 
-        (kind, self.start..self.pos())
+        let end = self.pos();
+        self.eat_whitespace();
+
+        (kind, self.start..end)
     }
 
     pub fn bump(&mut self) -> Option<char> {
@@ -1252,6 +1261,12 @@ impl<'a> Lexer<'a> {
 
     pub fn eof(&self) -> bool {
         self.chars.len() == 0
+    }
+
+    /// true si le prochain token est le premier de la ligne (ignore les
+    /// whitespace / comments)
+    pub fn at_bol(&self) -> bool {
+        self.at_bol
     }
 
     pub fn pos(&self) -> u32 {
@@ -1690,11 +1705,12 @@ impl<'a> Lexer<'a> {
     }
 
     fn eat_whitespace(&mut self) {
+        self.at_bol = false;
+
         loop {
             // les line continuations seraient mangées automatiquement mais on
-            // veut les manger explicitement maintenant car juste après on
-            // récupère la position du début du token et on veut pas inclure
-            // les line continuations
+            // veut les manger explicitement car sinon elles pourraient faire
+            // partie du range du prochain token
             eat_line_cont(&mut self.chars.raw);
 
             match self.peek(0) {
@@ -1704,7 +1720,11 @@ impl<'a> Lexer<'a> {
                     _ => return,
                 },
                 c if is_whitespace(c) => {
-                    self.bump();
+                    if eat_newline(&mut self.chars) {
+                        self.at_bol = true;
+                    } else {
+                        self.bump();
+                    }
                 }
                 _ => return,
             }
@@ -1720,6 +1740,7 @@ impl<'a> Lexer<'a> {
         // todo: on pourrait chercher le newline directement dans les bytes
         while !self.eof() {
             if eat_newline(&mut self.chars) {
+                self.at_bol = true;
                 return;
             }
             self.chars.next();

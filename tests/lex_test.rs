@@ -1482,3 +1482,67 @@ fn float_literal() {
     assert_number_eq!("0x1.5p'3", Err(ParseNumberError::ExpectedExponentValue(6)));
     assert_number_eq!("0x1.5p+'3", Err(ParseNumberError::ExpectedExponentValue(7)));
 }
+
+#[test]
+fn bol() {
+    let lexer = Lexer::new("");
+    assert!(lexer.at_bol());
+
+    let src =
+r"
+      a b /*
+    blabla
+    */
+
+
+    c // lol
+d /* abc */ + 2
+    /* blabla */;
+
+    a \
+    b c
+
+    a /*
+    blabla */ b
+";
+
+    let mut lexer = Lexer::new(src);
+    assert!(lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("a"), 7..8));
+
+    assert!(!lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("b"), 9..10));
+
+    assert!(lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("c"), 38..39));
+
+    assert!(lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("d"), 47..48));
+
+    assert!(!lexer.at_bol());
+    assert_eq!(lexer.lex(), (Plus, 59..60));
+
+    assert!(!lexer.at_bol());
+    assert_eq!(lexer.lex(), (Number, 61..62));
+
+    assert!(lexer.at_bol());
+    assert_eq!(lexer.lex(), (Semi, 79..80));
+
+    assert!(lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("a"), 86..87));
+
+    // après une line cont, ce n'est pas au début de la ligne
+    assert!(!lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("b"), 94..95));
+
+    assert!(!lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("c"), 96..97));
+
+    assert!(lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("a"), 103..104));
+
+    assert!(!lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("b"), 122..123));
+
+    assert!(lexer.at_bol());
+}
