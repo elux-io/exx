@@ -353,17 +353,17 @@ fn char() {
     ]);
 
     // non ascii / out of range
-    errors!("'😀'", [LexError::Char(CharError::Unmappable, 0..6)]);
-    errors!("u8'😀'", [LexError::Char(CharError::Unmappable, 0..8)]);
+    errors!("'😀'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), 0..6)]);
+    errors!("u8'😀'", [LexError::Char(CharError::Unmappable(Encoding::Utf8), 0..8)]);
     tokens!("u'ÿ'", [(Char(Encoding::Utf16, 'ÿ' as u32, None), 0..5)]);
-    errors!("u'😀'", [LexError::Char(CharError::Unmappable, 0..7)]);
+    errors!("u'😀'", [LexError::Char(CharError::Unmappable(Encoding::Utf16), 0..7)]);
     tokens!("U'😀'", [(Char(Encoding::Utf32, '😀' as u32, None), 0..7)]);
-    errors!("'é'", [LexError::Char(CharError::Unmappable, 0..4)]);
+    errors!("'é'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), 0..4)]);
     tokens!("u'é'", [(Char(Encoding::Utf16, 'é' as u32, None), 0..5)]);
     tokens!("U'é'", [(Char(Encoding::Utf32, 'é' as u32, None), 0..5)]);
     // ÿ == 0xFF == 255 mais les numeric escapes ont le droit d'utiliser toute
     // la capacité y compris si ce n'est pas un code point Unicode valide
-    errors!("'ÿ'", [LexError::Char(CharError::Unmappable, 0..4)]);
+    errors!("'ÿ'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), 0..4)]);
     tokens!(r"'\xFF'", [(Char(Encoding::Ordinary, 'ÿ' as u32, None), 0..6)]);
 
     // multichar

@@ -806,7 +806,7 @@ pub enum UnterminatedKind {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum CharError {
     Empty,
-    Unmappable,
+    Unmappable(Encoding),
     TooManyChars,
     MulticharPrefix,
     NonAsciiInMultichar,
@@ -1345,7 +1345,7 @@ impl<'a> Lexer<'a> {
 
                     if !char::from_u32(c.value).is_some_and(is_single_code_unit) {
                         self.errors.push(LexError::Char(
-                            CharError::Unmappable,
+                            CharError::Unmappable(encoding),
                             self.start..self.pos(),
                         ));
                     }
