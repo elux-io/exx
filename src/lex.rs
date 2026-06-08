@@ -1768,6 +1768,14 @@ impl<'a> Lexer<'a> {
                         self.bump();
                     }
                 }
+                '\0' => {
+                    // après le dernier token on considère toujours qu'on est
+                    // au début de la ligne car le compilateur doit toujours se
+                    // comporter comme si il y avait un newline à la fin du fichier
+                    // même si ce n'est pas le cas (voir [lex.phases])
+                    self.at_bol = true;
+                    return;
+                }
                 _ => return,
             }
         }

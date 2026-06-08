@@ -1556,6 +1556,13 @@ fn bol() {
     let lexer = Lexer::new("");
     assert!(lexer.at_bol());
 
+    let mut lexer = Lexer::new("a");
+    assert!(lexer.at_bol());
+    assert_eq!(lexer.lex(), (name("a"), 0..1));
+    // on considère bien qu'on est au début de la ligne après le dernier token
+    assert!(lexer.at_bol());
+    assert!(lexer.at_bol());
+
     let src =
 r"
       a b /*
