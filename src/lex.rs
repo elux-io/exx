@@ -733,7 +733,7 @@ impl Iterator for SkipLineCont<'_> {
     }
 }
 
-fn eat_newline(chars: &mut (impl Iterator<Item = char> + Clone)) -> bool {
+pub fn eat_newline(chars: &mut (impl Iterator<Item = char> + Clone)) -> bool {
     let mut it = chars.clone();
     match it.next() {
         Some('\r') if let Some('\n') = it.clone().next() => {

@@ -3,3 +3,4 @@
 
 pub mod lex;
 pub mod name;
+pub mod source;
