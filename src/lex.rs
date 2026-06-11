@@ -124,8 +124,8 @@ pub enum TokenKind {
     HashHash, // ##
 
     // punctuation
-    BraceL,     // (
-    BraceR,     // )
+    BraceL,     // {
+    BraceR,     // }
     BracketL,   // [
     BracketR,   // ]
     ParenL,     // (
