@@ -1,6 +1,9 @@
 //! ~ lexical analysis ~
 
-use crate::name::Name;
+use crate::{
+    name::Name,
+    source::{Loc, SourceHub, Span},
+};
 use arrayvec::ArrayVec;
 use core::{num::IntErrorKind, str::Bytes};
 use std::{
@@ -191,7 +194,33 @@ pub enum TokenKind {
     Unknown,
 }
 
-const MAX_MULTICHAR_LEN: usize = 4;
+#[derive(Clone, PartialEq, Debug)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: Span,
+    pub space_before: bool,
+}
+
+impl Token {
+    pub fn new(kind: TokenKind, span: Span, space_before: bool) -> Self {
+        Self {
+            kind,
+            span,
+            space_before,
+        }
+    }
+
+    pub fn lexeme<'a>(&self, shub: &'a SourceHub) -> Cow<'a, str> {
+        // todo: si on stockait un flag pour dire qu'il n'y a pas de `\`
+        // dans le lexeme, on n'aurait pas besoin de le reparcourir à
+        // chaque fois pour rien (en plus c'est qui le gros fou qui met des
+        // line continuations en plein milieu des tokens ??)
+        extract_lexeme(&self.kind, shub.text(shub.source_span(self.span)))
+    }
+}
+
+pub const MAX_MULTICHAR_LEN: usize = 4;
+pub const MAX_RAW_STR_DELIM_LEN: usize = 16;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StrKind {
@@ -801,14 +830,14 @@ fn remove_line_conts_and_decode_ucns(src: &str) -> String {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum LexError {
-    Char(CharError, Range<u32>),
-    Str(StrError, Range<u32>),
-    Unterminated(UnterminatedKind, u32),
-    Escape(EscapeError, Range<u32>),
+    Char(CharError, Span),
+    Str(StrError, Span),
+    Unterminated(UnterminatedKind, Span),
+    Escape(EscapeError, Span),
     UnexpectedBasicUcn {
         c: char,
         is_control: bool,
-        range: Range<u32>,
+        span: Span,
     },
 }
 
@@ -1059,23 +1088,34 @@ fn eat_ucn_name(chars: &mut SkipLineCont) -> Result<char, EscapeError> {
     }
 }
 
+pub fn to_span(r: Range<u32>, source_start: Loc) -> Span {
+    Span {
+        lo: Loc(r.start + source_start.0),
+        hi: Loc(r.end + source_start.0),
+    }
+}
+
 pub struct Lexer<'a> {
     src: &'a str,
     chars: SkipLineCont<'a>,
+    source_start: Loc,
     start: u32,
     at_bol: bool,
+    next_has_space_before: bool,
     errors: Vec<LexError>,
     #[cfg(debug_assertions)]
     prev: char,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(src: &'a str) -> Self {
+    pub fn new(src: &'a str, source_start: Loc) -> Self {
         let mut lexer = Self {
             src,
             chars: SkipLineCont { raw: src.chars() },
+            source_start,
             start: 0,
             at_bol: false,
+            next_has_space_before: false,
             errors: Vec::new(),
             #[cfg(debug_assertions)]
             prev: '\0',
@@ -1090,10 +1130,10 @@ impl<'a> Lexer<'a> {
         &self.errors
     }
 
-    pub fn lex(&mut self) -> (TokenKind, Range<u32>) {
+    pub fn lex(&mut self) -> Token {
         use TokenKind::*;
 
-        self.eat_whitespace();
+        let space_before = self.next_has_space_before;
         self.start = self.pos();
 
         let kind = match self.bump() {
@@ -1207,10 +1247,12 @@ impl<'a> Lexer<'a> {
         let end = self.pos();
         self.eat_whitespace();
 
-        (kind, self.start..end)
+        let span = to_span(self.start..end, self.source_start);
+        Token::new(kind, span, space_before)
     }
 
-    pub fn lex_header_name(&mut self) -> Option<(TokenKind, Range<u32>)> {
+    pub fn lex_header_name(&mut self) -> Option<Token> {
+        let space_before = self.next_has_space_before;
         let mut it = self.chars.clone();
         let (kind, end_char) = match it.next() {
             Some('<') => (HeaderKind::Angle, '>'),
@@ -1232,7 +1274,19 @@ impl<'a> Lexer<'a> {
         let end = self.pos();
         self.eat_whitespace();
 
-        Some((TokenKind::Header(kind), start..end))
+        Some(Token::new(
+            TokenKind::Header(kind),
+            to_span(start..end, self.source_start),
+            space_before,
+        ))
+    }
+
+    pub fn lex_until_eof(&mut self) -> Vec<Token> {
+        let mut tokens = Vec::with_capacity(self.chars.len() / 5);
+        while !self.eof() {
+            tokens.push(self.lex());
+        }
+        tokens
     }
 
     pub fn bump(&mut self) -> Option<char> {
@@ -1245,15 +1299,15 @@ impl<'a> Lexer<'a> {
                         is_control: c.is_control(),
                         // todo: ça serait mieux d'avoir le range de l'UCN en lui-même
                         // et pas juste le premier caractère
-                        range: ucn_start..ucn_start + 1,
+                        span: to_span(ucn_start..ucn_start + 1, self.source_start),
                     });
                 }
                 Some(c)
             }
 
             Some(Err(e)) => {
-                self.errors
-                    .push(LexError::Escape(e, ucn_start..ucn_start + 1));
+                let span = to_span(ucn_start..ucn_start + 1, self.source_start);
+                self.errors.push(LexError::Escape(e, span));
                 self.chars.next()
             }
 
@@ -1371,12 +1425,14 @@ impl<'a> Lexer<'a> {
         }
 
         if !is_terminated {
-            self.errors
-                .push(LexError::Unterminated(UnterminatedKind::Char, self.start));
+            self.errors.push(LexError::Unterminated(
+                UnterminatedKind::Char,
+                to_span(self.start..self.start + 1, self.source_start),
+            ));
         } else if has_too_many_chars && !has_invalid_escape {
             self.errors.push(LexError::Char(
                 CharError::TooManyChars,
-                self.start..self.pos(),
+                to_span(self.start..self.pos(), self.source_start),
             ));
         }
 
@@ -1385,8 +1441,10 @@ impl<'a> Lexer<'a> {
         match &chars[..] {
             [] => {
                 if is_terminated {
-                    self.errors
-                        .push(LexError::Char(CharError::Empty, self.start..self.pos()));
+                    self.errors.push(LexError::Char(
+                        CharError::Empty,
+                        to_span(self.start..self.pos(), self.source_start),
+                    ));
                 }
 
                 TokenKind::Char(encoding, '\0' as u32, None)
@@ -1403,7 +1461,7 @@ impl<'a> Lexer<'a> {
                     if !char::from_u32(c.value).is_some_and(is_single_code_unit) {
                         self.errors.push(LexError::Char(
                             CharError::Unmappable(encoding),
-                            self.start..self.pos(),
+                            to_span(self.start..self.pos(), self.source_start),
                         ));
                     }
                 }
@@ -1415,7 +1473,7 @@ impl<'a> Lexer<'a> {
                 if !prefix.is_empty() && !has_invalid_escape {
                     self.errors.push(LexError::Char(
                         CharError::MulticharPrefix,
-                        self.start..self.pos(),
+                        to_span(self.start..self.pos(), self.source_start),
                     ));
                 }
 
@@ -1426,7 +1484,7 @@ impl<'a> Lexer<'a> {
                     } else if !c.is_invalid_escape {
                         self.errors.push(LexError::Char(
                             CharError::NonAsciiInMultichar,
-                            self.start..self.pos(),
+                            to_span(self.start..self.pos(), self.source_start),
                         ));
                         break;
                     }
@@ -1458,8 +1516,6 @@ impl<'a> Lexer<'a> {
     fn raw_str(&mut self, encoding: Encoding) -> TokenKind {
         debug_assert_eq!(self.prev, '"');
 
-        const MAX_DELIM_LEN: usize = 16;
-
         let delim_start = self.pos();
         let mut invalid_char_in_delim = false;
         let mut found_delim = false;
@@ -1472,12 +1528,14 @@ impl<'a> Lexer<'a> {
         // pour ne pas avoir à allouer à chaque fois (mais on veut quand même
         // que ça puisse fallback sur la heap pour qu'on puisse continuer
         // le lexing même si le delim est trop grand)
-        let mut delim = String::with_capacity(MAX_DELIM_LEN);
+        let mut delim = String::with_capacity(MAX_RAW_STR_DELIM_LEN);
         let mut pos = delim_start;
         loop {
             if eat_newline(it) {
-                self.errors
-                    .push(LexError::Str(StrError::InvalidCharInDelim, pos..pos + 1));
+                self.errors.push(LexError::Str(
+                    StrError::InvalidCharInDelim,
+                    to_span(pos..pos + 1, self.source_start),
+                ));
                 invalid_char_in_delim = true;
                 break;
             }
@@ -1493,7 +1551,7 @@ impl<'a> Lexer<'a> {
                     {
                         self.errors.push(LexError::Str(
                             StrError::InvalidCharInDelim,
-                            pos..pos + c.len_utf8() as u32,
+                            to_span(pos..pos + c.len_utf8() as u32, self.source_start),
                         ));
                         invalid_char_in_delim = true;
                         break;
@@ -1523,10 +1581,10 @@ impl<'a> Lexer<'a> {
             return TokenKind::Str(StrKind::Raw, encoding, ByteString(vec![0]), None);
         }
 
-        if delim.len() >= MAX_DELIM_LEN {
+        if delim.len() >= MAX_RAW_STR_DELIM_LEN {
             self.errors.push(LexError::Str(
                 StrError::TooManyCharsInDelim,
-                delim_start..pos,
+                to_span(delim_start..pos, self.source_start),
             ));
         }
 
@@ -1569,7 +1627,7 @@ impl<'a> Lexer<'a> {
                         Some(delim.clone())
                     },
                 },
-                self.start,
+                to_span(self.start..self.start + 1, self.source_start),
             ));
         }
 
@@ -1621,8 +1679,10 @@ impl<'a> Lexer<'a> {
         }
 
         if !is_terminated {
-            self.errors
-                .push(LexError::Unterminated(UnterminatedKind::Str, self.start));
+            self.errors.push(LexError::Unterminated(
+                UnterminatedKind::Str,
+                to_span(self.start..self.start + 1, self.source_start),
+            ));
         }
 
         value.push(0);
@@ -1633,6 +1693,8 @@ impl<'a> Lexer<'a> {
 
     fn next_char_in_str(&mut self, encoding: Encoding) -> Option<StrChar> {
         let escape_start = self.pos();
+        let span = || to_span(escape_start..escape_start + 1, self.source_start);
+
         if let Some(ucn) = eat_ucn(&mut self.chars) {
             match ucn {
                 Ok(c) => Some(StrChar {
@@ -1641,8 +1703,7 @@ impl<'a> Lexer<'a> {
                     is_invalid_escape: false,
                 }),
                 Err(e) => {
-                    self.errors
-                        .push(LexError::Escape(e, escape_start..escape_start + 1));
+                    self.errors.push(LexError::Escape(e, span()));
 
                     // on retourne le prochain caractère (premier caractère de l'UCN),
                     // ce qui revient à interpréter l'UCN invalide caractère par caractère
@@ -1664,10 +1725,8 @@ impl<'a> Lexer<'a> {
                             Encoding::Utf32 => u32::MAX,
                         };
                         if v > max {
-                            self.errors.push(LexError::Escape(
-                                EscapeError::OutOfRange,
-                                escape_start..escape_start + 1,
-                            ));
+                            self.errors
+                                .push(LexError::Escape(EscapeError::OutOfRange, span()));
                             has_escape_error = true;
                         }
                     };
@@ -1680,8 +1739,7 @@ impl<'a> Lexer<'a> {
                 }
 
                 Some(Err(e)) => {
-                    self.errors
-                        .push(LexError::Escape(e, escape_start..escape_start + 1));
+                    self.errors.push(LexError::Escape(e, span()));
 
                     self.chars.next().map(|c| StrChar {
                         value: c as u32,
@@ -1723,12 +1781,12 @@ impl<'a> Lexer<'a> {
         TokenKind::Number
     }
 
-    fn str_suffix(&mut self, is_raw_str: bool) -> Option<UdSuffix> {
+    fn str_suffix(&mut self, raw_str: bool) -> Option<UdSuffix> {
         if is_ident_start(self.peek(0)) {
             // ok il y a un suffixe mais on veut sa position dans le lexème lui-même
             // (donc sans line continuations etc)
             let src = &self.src[self.start as usize..self.pos() as usize];
-            let pos = if is_raw_str {
+            let pos = if raw_str {
                 extract_lexeme_raw_str(src)
             } else {
                 extract_lexeme_basic(src)
@@ -1748,6 +1806,7 @@ impl<'a> Lexer<'a> {
 
     fn eat_whitespace(&mut self) {
         self.at_bol = false;
+        self.next_has_space_before = false;
 
         loop {
             // les line continuations seraient mangées automatiquement mais on
@@ -1762,6 +1821,7 @@ impl<'a> Lexer<'a> {
                     _ => return,
                 },
                 c if is_whitespace(c) => {
+                    self.next_has_space_before = true;
                     if eat_newline(&mut self.chars) {
                         self.at_bol = true;
                     } else {
@@ -1791,6 +1851,7 @@ impl<'a> Lexer<'a> {
         while !self.eof() {
             if eat_newline(&mut self.chars) {
                 self.at_bol = true;
+                self.next_has_space_before = false;
                 return;
             }
             self.chars.next();
@@ -1808,6 +1869,7 @@ impl<'a> Lexer<'a> {
         // todo: on pourrait chercher le `*` dans les bytes
         while !self.eof() {
             if self.eat_two('*', '/') {
+                self.next_has_space_before = true;
                 return;
             }
             self.chars.next();
@@ -1815,7 +1877,7 @@ impl<'a> Lexer<'a> {
 
         self.errors.push(LexError::Unterminated(
             UnterminatedKind::MultilineComment,
-            start,
+            to_span(start..start + 2, self.source_start),
         ));
     }
 }

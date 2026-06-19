@@ -3,8 +3,10 @@
 #![rustfmt::skip]
 
 use exx::lex::*;
+use exx::source::{Loc, Span};
 use std::bstr::ByteString;
 use std::num::NonZeroU32;
+use std::ops::Range;
 use TokenKind::*;
 
 /// assert que les tokens de la source sont les tokens attendus et qu'il y a pas d'erreur
@@ -18,8 +20,8 @@ macro_rules! tokens {
 macro_rules! errors {
     ($src:expr, [$($error:expr),* $(,)?]) => {
         {
-            let mut lexer = Lexer::new($src);
-            while lexer.lex().0 != TokenKind::Eof {}
+            let mut lexer = Lexer::new($src, Loc(0));
+            lexer.lex_until_eof();
 
             let expected_errors = [$($error,)*];
             assert_eq!(lexer.errors(), &expected_errors);
@@ -31,11 +33,8 @@ macro_rules! errors {
 macro_rules! tokens_and_errors {
     ($src:expr, [$($token:expr),* $(,)?], [$($error:expr),* $(,)?]) => {
         {
-            let mut lexer = Lexer::new($src);
-            let mut tokens = Vec::new();
-            while let (kind, range) = lexer.lex() && kind != TokenKind::Eof {
-                tokens.push((kind, range));
-            }
+            let mut lexer = Lexer::new($src, Loc(0));
+            let tokens = lexer.lex_until_eof().into_iter().map(|t| (t.kind, to_range(t.span))).collect::<Vec<_>>();
 
             let expected_errors = [$($error,)*];
             assert_eq!(lexer.errors(), &expected_errors);
@@ -50,18 +49,24 @@ macro_rules! tokens_and_errors {
 macro_rules! lexeme {
     ($src:expr, $expected:expr) => {
         {
-            let mut lexer = Lexer::new($src);
-            let mut tokens = Vec::new();
-            while let (kind, range) = lexer.lex() && kind != TokenKind::Eof {
-                tokens.push((kind, range));
-            }
+            let mut lexer = Lexer::new($src, Loc(0));
+            let tokens = lexer.lex_until_eof();
             assert_eq!(tokens.len(), 1);
 
-            let (kind, range) = &tokens[0];
-            let actual = extract_lexeme(kind, &$src[range.start as usize..range.end as usize]);
+            let token = &tokens[0];
+            let range = to_range(token.span);
+            let actual = extract_lexeme(&token.kind, &$src[range.start as usize..range.end as usize]);
             assert_eq!(actual, $expected);
         }
     };
+}
+
+fn to_range(span: Span) -> Range<u32> {
+    span.lo.0..span.hi.0
+}
+
+fn to_kind_range(token: Token) -> (TokenKind, Range<u32>) {
+    (token.kind, to_range(token.span))
 }
 
 fn to_utf8(s: &str) -> ByteString {
@@ -84,6 +89,13 @@ fn to_utf32(s: &str) -> ByteString {
 
 fn name(s: &str) -> TokenKind {
     Name(exx::name::Name::from(s))
+}
+
+fn span(r: Range<u32>) -> Span {
+    Span {
+        lo: Loc(r.start),
+        hi: Loc(r.end),
+    }
 }
 
 #[test]
@@ -301,32 +313,38 @@ fn comments() {
     tokens!("a/* bonjour */b", [(name("a"), 0..1), (name("b"), 14..15)]);
 
     // unterminated
-    errors!("/*", [LexError::Unterminated(UnterminatedKind::MultilineComment, 0)]);
-    errors!(" /* a", [LexError::Unterminated(UnterminatedKind::MultilineComment, 1)]);
-    errors!(" /* a *", [LexError::Unterminated(UnterminatedKind::MultilineComment, 1)]);
-    errors!(" /* a /", [LexError::Unterminated(UnterminatedKind::MultilineComment, 1)]);
-    errors!(" /* a // b", [LexError::Unterminated(UnterminatedKind::MultilineComment, 1)]);
-    errors!(" /* a // b\n", [LexError::Unterminated(UnterminatedKind::MultilineComment, 1)]);
+    errors!("/*", [LexError::Unterminated(UnterminatedKind::MultilineComment, span(0..2))]);
+    errors!(" /* a", [LexError::Unterminated(UnterminatedKind::MultilineComment, span(1..3))]);
+    errors!(" /* a *", [LexError::Unterminated(UnterminatedKind::MultilineComment, span(1..3))]);
+    errors!(" /* a /", [LexError::Unterminated(UnterminatedKind::MultilineComment, span(1..3))]);
+    errors!(" /* a // b", [LexError::Unterminated(UnterminatedKind::MultilineComment, span(1..3))]);
+    errors!(" /* a // b\n", [LexError::Unterminated(UnterminatedKind::MultilineComment, span(1..3))]);
 
     // with line continuations
-    let src =
-r"
+    let src = r"
 a
  /\
 /__\
     commentaire
 b
-";
+    ";
     tokens!(src, [(name("a"), 1..2), (name("b"), 28..29)]);
 
-    let src =
-r"
+    let src = r"
 a/\
 * blabla \
 blabla *\
 /b
-";
+    ";
     tokens!(src, [(name("a"), 1..2), (name("b"), 27..28)]);
+
+    // unterminated avec line continuation (pointe juste sur `/\` mais peut-être
+    // qu'on veut que ça pointe jusqu'au `*` ?)
+    let src = r"
+/\
+*
+    ";
+    errors!(src, [LexError::Unterminated(UnterminatedKind::MultilineComment, span(1..3))]);
 }
 
 #[test]
@@ -353,46 +371,46 @@ fn char() {
     ]);
 
     // non ascii / out of range
-    errors!("'😀'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), 0..6)]);
-    errors!("u8'😀'", [LexError::Char(CharError::Unmappable(Encoding::Utf8), 0..8)]);
+    errors!("'😀'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), span(0..6))]);
+    errors!("u8'😀'", [LexError::Char(CharError::Unmappable(Encoding::Utf8), span(0..8))]);
     tokens!("u'ÿ'", [(Char(Encoding::Utf16, 'ÿ' as u32, None), 0..5)]);
-    errors!("u'😀'", [LexError::Char(CharError::Unmappable(Encoding::Utf16), 0..7)]);
+    errors!("u'😀'", [LexError::Char(CharError::Unmappable(Encoding::Utf16), span(0..7))]);
     tokens!("U'😀'", [(Char(Encoding::Utf32, '😀' as u32, None), 0..7)]);
-    errors!("'é'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), 0..4)]);
+    errors!("'é'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), span(0..4))]);
     tokens!("u'é'", [(Char(Encoding::Utf16, 'é' as u32, None), 0..5)]);
     tokens!("U'é'", [(Char(Encoding::Utf32, 'é' as u32, None), 0..5)]);
     // ÿ == 0xFF == 255 mais les numeric escapes ont le droit d'utiliser toute
     // la capacité y compris si ce n'est pas un code point Unicode valide
-    errors!("'ÿ'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), 0..4)]);
+    errors!("'ÿ'", [LexError::Char(CharError::Unmappable(Encoding::Ordinary), span(0..4))]);
     tokens!(r"'\xFF'", [(Char(Encoding::Ordinary, 'ÿ' as u32, None), 0..6)]);
 
     // multichar
     tokens!("'abcd'", [(Multichar(1633837924, None), 0..6)]);
-    errors!("'abcde'", [LexError::Char(CharError::TooManyChars, 0..7)]);
-    errors!(r"u8'ab'", [LexError::Char(CharError::MulticharPrefix, 0..6)]);
-    errors!(r"u'ab'", [LexError::Char(CharError::MulticharPrefix, 0..5)]);
-    errors!(r"U'ab'", [LexError::Char(CharError::MulticharPrefix, 0..5)]);
-    errors!(r"L'ab'", [LexError::Char(CharError::MulticharPrefix, 0..5)]);
+    errors!("'abcde'", [LexError::Char(CharError::TooManyChars, span(0..7))]);
+    errors!(r"u8'ab'", [LexError::Char(CharError::MulticharPrefix, span(0..6))]);
+    errors!(r"u'ab'", [LexError::Char(CharError::MulticharPrefix, span(0..5))]);
+    errors!(r"U'ab'", [LexError::Char(CharError::MulticharPrefix, span(0..5))]);
+    errors!(r"L'ab'", [LexError::Char(CharError::MulticharPrefix, span(0..5))]);
     tokens!("a'ab'", [
         (name("a"), 0..1),
         (Multichar(24930, None), 1..5),
     ]);
     // invalid chars
-    errors!(r"'aéô'", [LexError::Char(CharError::NonAsciiInMultichar, 0..7)]);
+    errors!(r"'aéô'", [LexError::Char(CharError::NonAsciiInMultichar, span(0..7))]);
     // with multiple numeric escapes
     tokens!("'\\75\\76'", [(Multichar(15678, None), 0..8)]);
     // too many chars et invalid escape
     // todo: peut-être qu'on voudrait afficher l'erreur too many chars car
     // on voit bien qu'à part l'escape invalide il y avait 5 chars valides et donc
     // dans tous les cas ça dépasse le nombre de chars autorisés dans un multichar
-    errors!("'abcde\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, 6..7)]);
+    errors!("'abcde\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, span(6..7))]);
     // l'escape sequence est invalide donc on la considère caractère par caractère
     // mais on n'affiche pas l'erreur too many chars pour autant car on considère
     // que le mec n'a pas voulu faire un multichar (juste un char, qui se trouve
     // être invalide)
-    errors!("'\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!("'\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
     // todo: on n'affiche pas l'erreur multichar prefix mais peut-être qu'on devrait?
-    errors!("u8'\\75\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, 6..7)]);
+    errors!("u8'\\75\\xFFFF'", [LexError::Escape(EscapeError::OutOfRange, span(6..7))]);
 
     // empty
     // quand on rencontre un caractère vide, on note l'erreur et on le remplace
@@ -400,57 +418,57 @@ fn char() {
     // todo: peut-être qu'il faut pas faire comme ça ?
     tokens_and_errors!("''",
         [(Char(Encoding::Ordinary, '\0' as u32, None), 0..2)],
-        [LexError::Char(CharError::Empty, 0..2)]
+        [LexError::Char(CharError::Empty, span(0..2))]
     );
-    errors!("u8''", [LexError::Char(CharError::Empty, 0..4)]);
-    errors!("u''", [LexError::Char(CharError::Empty, 0..3)]);
-    errors!("U''", [LexError::Char(CharError::Empty, 0..3)]);
-    errors!("L''", [LexError::Char(CharError::Empty, 0..3)]);
-    errors!(" ''", [LexError::Char(CharError::Empty, 1..3)]);
+    errors!("u8''", [LexError::Char(CharError::Empty, span(0..4))]);
+    errors!("u''", [LexError::Char(CharError::Empty, span(0..3))]);
+    errors!("U''", [LexError::Char(CharError::Empty, span(0..3))]);
+    errors!("L''", [LexError::Char(CharError::Empty, span(0..3))]);
+    errors!(" ''", [LexError::Char(CharError::Empty, span(1..3))]);
 
     // out of range octal escape sequences
     tokens!(r"'\377'", [(Char(Encoding::Ordinary, 255, None), 0..6)]);
-    errors!(r"'\400'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!(r"'\400'", [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
     tokens!(r"u8'\377'", [(Char(Encoding::Utf8, 255, None), 0..8)]);
-    errors!(r"u8'\400'", [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
+    errors!(r"u8'\400'", [LexError::Escape(EscapeError::OutOfRange, span(3..4))]);
     tokens!(r"L'\o{177777}'", [(Char(Encoding::Wide, 65_535, None), 0..13)]);
-    errors!(r"L'\o{200000}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r"L'\o{200000}'", [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r"u'\o{177777}'", [(Char(Encoding::Utf16, 65_535, None), 0..13)]);
-    errors!(r"u'\o{200000}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r"u'\o{200000}'", [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r"U'\o{37777777777}'", [(Char(Encoding::Utf32, 4_294_967_295, None), 0..18)]);
-    errors!(r"U'\o{40000000000}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r"U'\o{40000000000}'", [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
 
     // out of range hex escape sequences
     tokens!(r"'\xFF'", [(Char(Encoding::Ordinary, 255, None), 0..6)]);
-    errors!(r"'\x100'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!(r"'\x100'", [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
     tokens!(r"u8'\xFF'", [(Char(Encoding::Utf8, 255, None), 0..8)]);
-    errors!(r"u8'\x100'", [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
+    errors!(r"u8'\x100'", [LexError::Escape(EscapeError::OutOfRange, span(3..4))]);
     tokens!(r"L'\xFFFF'", [(Char(Encoding::Wide, 65_535, None), 0..9)]);
-    errors!(r"L'\x10000'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r"L'\x10000'", [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r"u'\xFFFF'", [(Char(Encoding::Utf16, 65_535, None), 0..9)]);
-    errors!(r"u'\x10000'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r"u'\x10000'", [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r"U'\xFFFFFFFF'", [(Char(Encoding::Utf32, 4_294_967_295, None), 0..13)]);
-    errors!(r"U'\x100000000'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r"U'\x100000000'", [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
 
     // invalid escape sequence (on note l'erreur mais on interprète caractère par
     // caractère pour pouvoir continuer le lexing)
     tokens_and_errors!(r"'\q'",
         [(Multichar(23665, None), 0..4)],
-        [LexError::Escape(EscapeError::UnknownEscape, 1..2)]
+        [LexError::Escape(EscapeError::UnknownEscape, span(1..2))]
     );
 
     // UCN
     // `\u0027` == `'` mais il faut pas les confondre (:
     tokens!(r"'\u0027'", [(Char(Encoding::Ordinary, '\'' as u32, None), 0..8)]);
     lexeme!(r"'\u0027'", r"'''");
-    errors!(r"'\u0027", [LexError::Unterminated(UnterminatedKind::Char, 0)]);
+    errors!(r"'\u0027", [LexError::Unterminated(UnterminatedKind::Char, span(0..1))]);
     // ici on détecte bien que le `\u0027` n'est pas valide (car en dehors d'un
     // char ou str) mais on considère quand même au final que c'est un `'`,
     // pour pouvoir continuer le lexing
     // on se retrouve donc avec le caractère 'a' pour la suite du lexing
     tokens_and_errors!(r"\u0027a'",
         [(Char(Encoding::Ordinary, 'a' as u32, None), 0..8)],
-        [LexError::UnexpectedBasicUcn { c: '\'', is_control: false, range: 0..1 }]
+        [LexError::UnexpectedBasicUcn { c: '\'', is_control: false, span: span(0..1) }]
     );
 
     // user-defined suffix
@@ -475,30 +493,30 @@ fn char() {
     // unterminated (on considère que c'est '\0' pour pouvoir continuer le lexing)
     tokens_and_errors!("'",
         [(Char(Encoding::Ordinary, '\0' as u32, None), 0..1)],
-        [LexError::Unterminated(UnterminatedKind::Char, 0)]
+        [LexError::Unterminated(UnterminatedKind::Char, span(0..1))]
     );
-    errors!("'a", [LexError::Unterminated(UnterminatedKind::Char, 0)]);
-    errors!("u8'a", [LexError::Unterminated(UnterminatedKind::Char, 0)]);
-    errors!(" '", [LexError::Unterminated(UnterminatedKind::Char, 1)]);
+    errors!("'a", [LexError::Unterminated(UnterminatedKind::Char, span(0..1))]);
+    errors!("u8'a", [LexError::Unterminated(UnterminatedKind::Char, span(0..1))]);
+    errors!(" '", [LexError::Unterminated(UnterminatedKind::Char, span(1..2))]);
     // unterminated and too many chars (the only error is "unterminated")
-    errors!("'abcdef", [LexError::Unterminated(UnterminatedKind::Char, 0)]);
+    errors!("'abcdef", [LexError::Unterminated(UnterminatedKind::Char, span(0..1))]);
 
     // on peut pas mettre de newline dans un char
     errors!("'a\n'", [
-        LexError::Unterminated(UnterminatedKind::Char, 0),
-        LexError::Unterminated(UnterminatedKind::Char, 3),
+        LexError::Unterminated(UnterminatedKind::Char, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Char, span(3..4)),
     ]);
     errors!("'\n'", [
-        LexError::Unterminated(UnterminatedKind::Char, 0),
-        LexError::Unterminated(UnterminatedKind::Char, 2),
+        LexError::Unterminated(UnterminatedKind::Char, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Char, span(2..3)),
     ]);
     errors!("'\r\n'", [
-        LexError::Unterminated(UnterminatedKind::Char, 0),
-        LexError::Unterminated(UnterminatedKind::Char, 3),
+        LexError::Unterminated(UnterminatedKind::Char, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Char, span(3..4)),
     ]);
     errors!("'\r'", [
-        LexError::Unterminated(UnterminatedKind::Char, 0),
-        LexError::Unterminated(UnterminatedKind::Char, 2),
+        LexError::Unterminated(UnterminatedKind::Char, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Char, span(2..3)),
     ]);
     // newline avec un suffixe (on considère bien que le suffixe ne fait pas
     // partie de la chaîne, car le char s'arrête au newline)
@@ -507,7 +525,7 @@ fn char() {
             (Char(Encoding::Ordinary, 'a' as u32, None), 0..2),
             (name("_abc"), 3..7),
         ],
-        [LexError::Unterminated(UnterminatedKind::Char, 0)]
+        [LexError::Unterminated(UnterminatedKind::Char, span(0..1))]
     );
 
     // with line continuations
@@ -573,41 +591,41 @@ fn str() {
     // caractère pour pouvoir continuer le lexing)
     tokens_and_errors!(r#""ab\qc""#,
         [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8(r"ab\qc"), None), 0..7)],
-        [LexError::Escape(EscapeError::UnknownEscape, 3..4)]
+        [LexError::Escape(EscapeError::UnknownEscape, span(3..4))]
     );
 
     // unterminated
-    errors!(" \"", [LexError::Unterminated(UnterminatedKind::Str, 1)]);
-    errors!("\"a", [LexError::Unterminated(UnterminatedKind::Str, 0)]);
+    errors!(" \"", [LexError::Unterminated(UnterminatedKind::Str, span(1..2))]);
+    errors!("\"a", [LexError::Unterminated(UnterminatedKind::Str, span(0..1))]);
     // le token Str a quand même la valeur des caractères qu'on a trouvé jusque là
     tokens_and_errors!("\"abcd",
         [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("abcd"), None), 0..5)],
-        [LexError::Unterminated(UnterminatedKind::Str, 0)]
+        [LexError::Unterminated(UnterminatedKind::Str, span(0..1))]
     );
 
     // `\u0022` == `"` mais il faut pas les confondre
     tokens!(r#""\u0022""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("\""), None), 0..8)]);
     lexeme!(r#""\u0022""#, r#"""""#);
-    errors!(r#""\u0022"#, [LexError::Unterminated(UnterminatedKind::Str, 0)]);
+    errors!(r#""\u0022"#, [LexError::Unterminated(UnterminatedKind::Str, span(0..1))]);
     // ici on détecte bien que le `\u0022` n'est pas valide mais on considère
     // quand même que c'est un `"` pour continuer le lexing
     tokens_and_errors!(r#"\u0022a""#,
         [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("a"), None), 0..8)],
-        [LexError::UnexpectedBasicUcn { c: '\"', is_control: false, range: 0..1 }]
+        [LexError::UnexpectedBasicUcn { c: '\"', is_control: false, span: span(0..1) }]
     );
 
     // ne peut pas contenir de newline
     errors!("\"\n\"", [
-        LexError::Unterminated(UnterminatedKind::Str, 0),
-        LexError::Unterminated(UnterminatedKind::Str, 2),
+        LexError::Unterminated(UnterminatedKind::Str, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Str, span(2..3)),
     ]);
     errors!("\"\r\n\"", [
-        LexError::Unterminated(UnterminatedKind::Str, 0),
-        LexError::Unterminated(UnterminatedKind::Str, 3),
+        LexError::Unterminated(UnterminatedKind::Str, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Str, span(3..4)),
     ]);
     errors!("\"\r\"", [
-        LexError::Unterminated(UnterminatedKind::Str, 0),
-        LexError::Unterminated(UnterminatedKind::Str, 2),
+        LexError::Unterminated(UnterminatedKind::Str, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Str, span(2..3)),
     ]);
     // newline avec un suffixe (on considère bien que le suffixe ne fait pas
     // partie de la chaîne, car la chaîne s'arrête au newline)
@@ -616,7 +634,7 @@ fn str() {
             (Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("salut"), None), 0..6),
             (name("_abc"), 7..11),
         ],
-        [LexError::Unterminated(UnterminatedKind::Str, 0)]
+        [LexError::Unterminated(UnterminatedKind::Str, span(0..1))]
     );
 
     let u8_bytes = |v: u8| ByteString([&v.to_le_bytes()[..], &[0]].concat());
@@ -625,27 +643,27 @@ fn str() {
 
     // out of range octal escape sequences
     tokens!(r#""\377""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, u8_bytes(255), None), 0..6)]);
-    errors!(r#""\400""#, [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!(r#""\400""#, [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
     tokens!(r#"u8"\377""#, [(Str(StrKind::NonRaw, Encoding::Utf8, u8_bytes(255), None), 0..8)]);
-    errors!(r#"u8"\400""#, [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
+    errors!(r#"u8"\400""#, [LexError::Escape(EscapeError::OutOfRange, span(3..4))]);
     tokens!(r#"L"\o{177777}""#, [(Str(StrKind::NonRaw, Encoding::Wide, u16_bytes(65_535), None), 0..13)]);
-    errors!(r#"L"\o{200000}""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r#"L"\o{200000}""#, [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r#"u"\o{177777}""#, [(Str(StrKind::NonRaw, Encoding::Utf16, u16_bytes(65_535), None), 0..13)]);
-    errors!(r#"u"\o{200000}""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r#"u"\o{200000}""#, [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r#"U"\o{37777777777}""#, [(Str(StrKind::NonRaw, Encoding::Utf32, u32_bytes(4_294_967_295), None), 0..18)]);
-    errors!(r#"U"\o{40000000000}""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r#"U"\o{40000000000}""#, [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
 
     // out of range hex escape sequences
     tokens!(r#""\xFF""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, u8_bytes(255), None), 0..6)]);
-    errors!(r#""\x100""#, [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!(r#""\x100""#, [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
     tokens!(r#"u8"\xFF""#, [(Str(StrKind::NonRaw, Encoding::Utf8, u8_bytes(255), None), 0..8)]);
-    errors!(r#"u8"\x100""#, [LexError::Escape(EscapeError::OutOfRange, 3..4)]);
+    errors!(r#"u8"\x100""#, [LexError::Escape(EscapeError::OutOfRange, span(3..4))]);
     tokens!(r#"L"\xFFFF""#, [(Str(StrKind::NonRaw, Encoding::Wide, u16_bytes(65_535), None), 0..9)]);
-    errors!(r#"L"\x10000""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r#"L"\x10000""#, [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r#"u"\xFFFF""#, [(Str(StrKind::NonRaw, Encoding::Utf16, u16_bytes(65_535), None), 0..9)]);
-    errors!(r#"u"\x10000""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r#"u"\x10000""#, [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
     tokens!(r#"U"\xFFFFFFFF""#, [(Str(StrKind::NonRaw, Encoding::Utf32, u32_bytes(4_294_967_295), None), 0..13)]);
-    errors!(r#"U"\x100000000""#, [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r#"U"\x100000000""#, [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
 
     // with line continuations and UCN
     tokens!("u\\\n8\"a\\\nb\\u00E9\\\n\"\\\n_a\\u00E9bc", [(Str(StrKind::NonRaw, Encoding::Utf8, to_utf8("abé"), Some(NonZeroU32::new(8).unwrap())), 0..30)]);
@@ -684,21 +702,21 @@ fn raw_str() {
     // todo: peut-être qu'on peut faire mieux ?
     tokens_and_errors!("R\"de\nim(abc)de\nim\"",
         [(Str(StrKind::Raw, Encoding::Ordinary, to_utf8(""), None), 0..18)],
-        [LexError::Str(StrError::InvalidCharInDelim, 4..5)]
+        [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]
     );
-    errors!("R\"de\r\nim(abc)de\r\nim\"", [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!("R\"de\rim(abc)de\rim\"", [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!("R\"de\tim(abc)de\tim\"", [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!("R\"de\u{B}im(abc)de\u{B}im\"", [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!("R\"de\u{C}im(abc)de\u{C}im\"", [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!(r#"R"de im(abc)de im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!(r#"R"de\im(abc)de\im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!(r#"R"de)im(abc)de)im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
-    errors!(r#"R"délim(abc)délim""#, [LexError::Str(StrError::InvalidCharInDelim, 3..5)]);
-    errors!(r#"R"d🤡lim(abc)d🤡lim""#, [LexError::Str(StrError::InvalidCharInDelim, 3..7)]);
+    errors!("R\"de\r\nim(abc)de\r\nim\"", [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!("R\"de\rim(abc)de\rim\"", [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!("R\"de\tim(abc)de\tim\"", [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!("R\"de\u{B}im(abc)de\u{B}im\"", [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!("R\"de\u{C}im(abc)de\u{C}im\"", [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!(r#"R"de im(abc)de im""#, [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!(r#"R"de\im(abc)de\im""#, [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!(r#"R"de)im(abc)de)im""#, [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
+    errors!(r#"R"délim(abc)délim""#, [LexError::Str(StrError::InvalidCharInDelim, span(3..5))]);
+    errors!(r#"R"d🤡lim(abc)d🤡lim""#, [LexError::Str(StrError::InvalidCharInDelim, span(3..7))]);
     // line continuations and UCN are not allowed in delim
-    errors!("R\"d\\\nelim(abc)d\\\nelim\"", [LexError::Str(StrError::InvalidCharInDelim, 3..4)]);
-    errors!(r#"R"de\u0061im(abc)de\u0061im""#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
+    errors!("R\"d\\\nelim(abc)d\\\nelim\"", [LexError::Str(StrError::InvalidCharInDelim, span(3..4))]);
+    errors!(r#"R"de\u0061im(abc)de\u0061im""#, [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
     // delim invalide mais avec un `"` en plein milieu de la chaîne, on considère
     // donc que c'est la fin de la chaîne même si ce n'est pas le cas (on considère
     // qu'on ne peut pas utiliser le délim pour trouver la fin vu qu'il est invalide
@@ -710,23 +728,23 @@ fn raw_str() {
             (name("de"), 13..15),
             (name("im"), 16..18),
         ],
-        [LexError::Str(StrError::InvalidCharInDelim, 4..5)]
+        [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]
     );
     // invalid char in delim and unterminated
-    errors!(r#"R"de\im(abc)de\im"#, [LexError::Str(StrError::InvalidCharInDelim, 4..5)]);
+    errors!(r#"R"de\im(abc)de\im"#, [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
 
     // too many chars in delim
     tokens!(r#"R"abcdefghijklmno(abc)abcdefghijklmno""#, [(Str(StrKind::Raw, Encoding::Ordinary, to_utf8("abc"), None), 0..38)]);
     // on note l'erreur mais on reconnaît quand même la chaîne pour pouvoir continuer le lexing
     tokens_and_errors!(r#"R"abcdefghijklmnop(abc)abcdefghijklmnop""#,
         [(Str(StrKind::Raw, Encoding::Ordinary, to_utf8("abc"), None), 0..40)],
-        [LexError::Str(StrError::TooManyCharsInDelim, 2..18)]
+        [LexError::Str(StrError::TooManyCharsInDelim, span(2..18))]
     );
 
     // without `(` and `)`
-    errors!("R\"salut\"", [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!("R\"(salut\"", [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!("R\"salut)\"", [LexError::Str(StrError::InvalidCharInDelim, 7..8)]);
+    errors!("R\"salut\"", [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!("R\"(salut\"", [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!("R\"salut)\"", [LexError::Str(StrError::InvalidCharInDelim, span(7..8))]);
 
     // with prefix
     tokens!("LR\"(abc)\"", [(Str(StrKind::Raw, Encoding::Wide, to_utf16("abc"), None), 0..9)]);
@@ -764,25 +782,25 @@ fn raw_str() {
 
     // unterminated
     // without closing quote
-    errors!(r#" R""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 1)]);
-    errors!(r#"R""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!(r#"R"("#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!(r#"R"delim"#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!(r#"R"delim("#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
-    errors!(r#"R"delim(abc"#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
-    errors!(r#"R"delim(abc)"#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
+    errors!(r#" R""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(1..2))]);
+    errors!(r#"R""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!(r#"R"("#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!(r#"R"delim"#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!(r#"R"delim("#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
+    errors!(r#"R"delim(abc"#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
+    errors!(r#"R"delim(abc)"#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
     // with closing quote
-    errors!(r#"R"""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!(r#"R"(""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!(r#"R"delim""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
-    errors!(r#"R"delim(""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
-    errors!(r#"R"delim(abc""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
-    errors!(r#"R"delim(abc)""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
+    errors!(r#"R"""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!(r#"R"(""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!(r#"R"delim""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
+    errors!(r#"R"delim(""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
+    errors!(r#"R"delim(abc""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
+    errors!(r#"R"delim(abc)""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
     // begin and end delim not matching
-    errors!(r#"R"delim(abc)lol""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
-    errors!(r#"R"delim(abc)delim2""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, 0)]);
+    errors!(r#"R"delim(abc)lol""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
+    errors!(r#"R"delim(abc)delim2""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: Some("delim".into()) }, span(0..1))]);
     // with too many chars in delim (the only error is "unterminated")
-    errors!(r#"R"abcdefghijklmnopqrs""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, 0)]);
+    errors!(r#"R"abcdefghijklmnopqrs""#, [LexError::Unterminated(UnterminatedKind::RawStr { delim: None }, span(0..1))]);
 
     // with line continuations
     tokens!("u\\\n8R\\\n\"delim(a\\ \né\\\nc)delim\"_a\\ \nb\\\nc", [(Str(StrKind::Raw, Encoding::Utf8, to_utf8("a\\ \né\\\nc"), Some(NonZeroU32::new(26).unwrap())), 0..39)]);
@@ -818,7 +836,7 @@ fn simple_escape_seq() {
     tokens!(r#""\"""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("\""), None), 0..4)]);
 
     // invalid
-    errors!(r"'\z'", [LexError::Escape(EscapeError::UnknownEscape, 1..2)]);
+    errors!(r"'\z'", [LexError::Escape(EscapeError::UnknownEscape, span(1..2))]);
 
     // outside char and str (ce n'est pas encore une erreur, juste un token Unknown)
     tokens!(r"\n", [(Unknown, 0..1), (name("n"), 1..2)]);
@@ -868,22 +886,22 @@ fn numeric_escape_seq() {
 
     // incomplete
     // todo: more precise locations
-    errors!(r"'\o'", [LexError::Escape(EscapeError::ExpectedOpenBrace, 1..2)]);
-    errors!(r"'\o{'", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
-    errors!(r"'\x'", [LexError::Escape(EscapeError::ExpectedOpenBraceOrHexDigit, 1..2)]);
-    errors!(r"'\xg'", [LexError::Escape(EscapeError::ExpectedOpenBraceOrHexDigit, 1..2)]);
-    errors!(r"'\x{'", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r"'\o'", [LexError::Escape(EscapeError::ExpectedOpenBrace, span(1..2))]);
+    errors!(r"'\o{'", [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
+    errors!(r"'\x'", [LexError::Escape(EscapeError::ExpectedOpenBraceOrHexDigit, span(1..2))]);
+    errors!(r"'\xg'", [LexError::Escape(EscapeError::ExpectedOpenBraceOrHexDigit, span(1..2))]);
+    errors!(r"'\x{'", [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
     // empty braces
-    errors!(r"'\o{}'", [LexError::Escape(EscapeError::EmptyBraces, 1..2)]);
-    errors!(r"'\x{}'", [LexError::Escape(EscapeError::EmptyBraces, 1..2)]);
+    errors!(r"'\o{}'", [LexError::Escape(EscapeError::EmptyBraces, span(1..2))]);
+    errors!(r"'\x{}'", [LexError::Escape(EscapeError::EmptyBraces, span(1..2))]);
 
     // doesn't go beyond the char or str (otherwise the error would be "invalid digit"
     // which is dumb)
-    errors!(r"'\o{'}", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
-    errors!(r"'\x{'}", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r"'\o{'}", [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
+    errors!(r"'\x{'}", [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
     // in str
-    errors!(r#""\o{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
-    errors!(r#""\x{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r#""\o{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
+    errors!(r#""\x{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
 
     // invalid digit
     // technically the grammar says that there can only be hex or oct digits inside
@@ -891,17 +909,17 @@ fn numeric_escape_seq() {
     // escape is not terminated but it's not a very good error message so we still
     // eat until the `}` and say that it contains an invalid digit (Clang also does
     // that, GCC and MSVC do the dumb error message)
-    errors!(r"'\o{128}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
-    errors!(r"'\o{12A}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
-    errors!(r"'\o{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, 1..2)]);
-    errors!(r"'\x{ABS}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
-    errors!(r"'\x{A+B}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
-    errors!(r"'\x{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
+    errors!(r"'\o{128}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, span(1..2))]);
+    errors!(r"'\o{12A}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, span(1..2))]);
+    errors!(r"'\o{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 8 }, span(1..2))]);
+    errors!(r"'\x{ABS}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, span(1..2))]);
+    errors!(r"'\x{A+B}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, span(1..2))]);
+    errors!(r"'\x{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, span(1..2))]);
 
     // out of range
-    errors!(r"'\o{7777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777}'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
-    errors!(r"'\xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
-    errors!(r"'\x{FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF}'", [LexError::Escape(EscapeError::OutOfRange, 1..2)]);
+    errors!(r"'\o{7777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777777}'", [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
+    errors!(r"'\xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'", [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
+    errors!(r"'\x{FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF}'", [LexError::Escape(EscapeError::OutOfRange, span(1..2))]);
 
     // on ne peut pas utiliser des UCN pour former une escape sequence
     // `\u0033` == `3` donc teste que ce n'est pas `\613` ni `\x313`
@@ -909,9 +927,9 @@ fn numeric_escape_seq() {
     tokens!(r#""\x31\u0033""#, [(Str(StrKind::NonRaw, Encoding::Ordinary, to_utf8("13"), None), 0..12)]);
     // `\u007B` == `{`
     tokens!(r"'\o{123}'", [(Char(Encoding::Ordinary, 83, None), 0..9)]);
-    errors!(r"'\o\u007B123}'", [LexError::Escape(EscapeError::ExpectedOpenBrace, 1..2)]);
+    errors!(r"'\o\u007B123}'", [LexError::Escape(EscapeError::ExpectedOpenBrace, span(1..2))]);
     tokens!(r"'\x{0}'", [(Char(Encoding::Ordinary, 0, None), 0..7)]);
-    errors!(r"'\x\u007B0}'", [LexError::Escape(EscapeError::ExpectedOpenBraceOrHexDigit, 1..2)]);
+    errors!(r"'\x\u007B0}'", [LexError::Escape(EscapeError::ExpectedOpenBraceOrHexDigit, span(1..2))]);
 
     // outside char and str
     tokens!(r"\123", [
@@ -957,14 +975,14 @@ fn ucn() {
     tokens!(r"u'\u{E9}'", [(Char(Encoding::Utf16, 'é' as u32, None), 0..9)]);
     tokens!(r"u'\u{e9}'", [(Char(Encoding::Utf16, 'é' as u32, None), 0..9)]);
     tokens!(r"U'\N{GRINNING FACE}'", [(Char(Encoding::Utf32, '😀' as u32, None), 0..20)]);
-    errors!(r"U'\N{grinning face}'", [LexError::Escape(EscapeError::InvalidUcnName, 2..3)]);
-    errors!(r"U'\N{+}'", [LexError::Escape(EscapeError::InvalidUcnName, 2..3)]);
+    errors!(r"U'\N{grinning face}'", [LexError::Escape(EscapeError::InvalidUcnName, span(2..3))]);
+    errors!(r"U'\N{+}'", [LexError::Escape(EscapeError::InvalidUcnName, span(2..3))]);
     // todo: le ucn invalide est interprété caractère par caractère donc c'est aussi
     // considéré comme un multichar (avec un caractère invalide) mais peut-être
     // qu'on veut pas
     errors!(r"U'\N{🤡}'", [
-        LexError::Escape(EscapeError::InvalidUcnName, 2..3),
-        LexError::Char(CharError::NonAsciiInMultichar, 0..11),
+        LexError::Escape(EscapeError::InvalidUcnName, span(2..3)),
+        LexError::Char(CharError::NonAsciiInMultichar, span(0..11)),
     ]);
 
     // followed by something
@@ -976,62 +994,63 @@ fn ucn() {
 
     // invalid value
     tokens!(r"U'\uD7FF'", [(Char(Encoding::Utf32, 0xD7FF, None), 0..9)]);
-    errors!(r"U'\uD800'", [LexError::Escape(EscapeError::InvalidUcnValue, 2..3)]);
-    errors!(r"U'\uDFFF'", [LexError::Escape(EscapeError::InvalidUcnValue, 2..3)]);
+    errors!(r"U'\uD800'", [LexError::Escape(EscapeError::InvalidUcnValue, span(2..3))]);
+    errors!(r"U'\uDFFF'", [LexError::Escape(EscapeError::InvalidUcnValue, span(2..3))]);
     tokens!(r"U'\uE000'", [(Char(Encoding::Utf32, 0xE000, None), 0..9)]);
     tokens!(r"U'\U0010FFFF'", [(Char(Encoding::Utf32, 0x10FFFF, None), 0..13)]);
-    errors!(r"U'\U00110000'", [LexError::Escape(EscapeError::InvalidUcnValue, 2..3)]);
-    errors!(r"U'\UFFFFFFFF'", [LexError::Escape(EscapeError::InvalidUcnValue, 2..3)]);
-    errors!(r"U'\u{FFFFFFFFFFFFFFFFFFFFFFF}'", [LexError::Escape(EscapeError::OutOfRange, 2..3)]);
+    errors!(r"U'\U00110000'", [LexError::Escape(EscapeError::InvalidUcnValue, span(2..3))]);
+    errors!(r"U'\UFFFFFFFF'", [LexError::Escape(EscapeError::InvalidUcnValue, span(2..3))]);
+    errors!(r"U'\u{FFFFFFFF}'", [LexError::Escape(EscapeError::InvalidUcnValue, span(2..3))]);
+    errors!(r"U'\u{FFFFFFFFFFFFFFFFFFFFFFF}'", [LexError::Escape(EscapeError::OutOfRange, span(2..3))]);
 
     // incomplete
-    errors!(r"'\u000'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
-    errors!(r"'\up'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
-    errors!(r"'\Up'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), 1..2)]);
-    errors!(r"'\u000X'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
-    errors!(r"'\U0000000X'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), 1..2)]);
+    errors!(r"'\u000'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), span(1..2))]);
+    errors!(r"'\up'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), span(1..2))]);
+    errors!(r"'\Up'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), span(1..2))]);
+    errors!(r"'\u000X'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), span(1..2))]);
+    errors!(r"'\U0000000X'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), span(1..2))]);
     // incomplete named ucn
-    errors!(r"\N", [LexError::Escape(EscapeError::ExpectedOpenBrace, 0..1)]);
-    errors!(r"\N{", [LexError::Escape(EscapeError::NoCloseBrace, 0..1)]);
+    errors!(r"\N", [LexError::Escape(EscapeError::ExpectedOpenBrace, span(0..1))]);
+    errors!(r"\N{", [LexError::Escape(EscapeError::NoCloseBrace, span(0..1))]);
     // inside char
-    errors!(r"'\N'", [LexError::Escape(EscapeError::ExpectedOpenBrace, 1..2)]);
-    errors!(r"'\N{'", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r"'\N'", [LexError::Escape(EscapeError::ExpectedOpenBrace, span(1..2))]);
+    errors!(r"'\N{'", [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
 
     // doesn't go beyond the char or str
-    errors!(r"'\u{'}", [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
-    errors!(r#""\u{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, 1..2)]);
+    errors!(r"'\u{'}", [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
+    errors!(r#""\u{"}"#, [LexError::Escape(EscapeError::NoCloseBrace, span(1..2))]);
     // same if the ucn is outside a char/str
     errors!(r"\u{'}", [
-        LexError::Escape(EscapeError::NoCloseBrace, 0..1),
-        LexError::Unterminated(UnterminatedKind::Char, 3),
+        LexError::Escape(EscapeError::NoCloseBrace, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Char, span(3..4)),
     ]);
     errors!(r#"\u{"}"#, [
-        LexError::Escape(EscapeError::NoCloseBrace, 0..1),
-        LexError::Unterminated(UnterminatedKind::Str, 3),
+        LexError::Escape(EscapeError::NoCloseBrace, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Str, span(3..4)),
     ]);
 
     // but the named ucn eats everything, whether it is in a char/str or not
     // todo: maybe not do that?
-    errors!(r"'\N{'}", [LexError::Escape(EscapeError::InvalidUcnName, 1..2)]);
-    errors!(r#""\N{"}"#, [LexError::Escape(EscapeError::InvalidUcnName, 1..2)]);
+    errors!(r"'\N{'}", [LexError::Escape(EscapeError::InvalidUcnName, span(1..2))]);
+    errors!(r#""\N{"}"#, [LexError::Escape(EscapeError::InvalidUcnName, span(1..2))]);
     // todo: the "unterminated" error is a bit dumb because the named ucn is
     // supposed to eat everything inside {}
     errors!(r"\N{'}", [
-        LexError::Escape(EscapeError::InvalidUcnName, 0..1),
-        LexError::Unterminated(UnterminatedKind::Char, 3),
+        LexError::Escape(EscapeError::InvalidUcnName, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Char, span(3..4)),
     ]);
     errors!(r#"\N{"}"#, [
-        LexError::Escape(EscapeError::InvalidUcnName, 0..1),
-        LexError::Unterminated(UnterminatedKind::Str, 3),
+        LexError::Escape(EscapeError::InvalidUcnName, span(0..1)),
+        LexError::Unterminated(UnterminatedKind::Str, span(3..4)),
     ]);
 
     // empty braces
-    errors!(r"\u{}", [LexError::Escape(EscapeError::EmptyBraces, 0..1)]);
-    errors!(r"\N{}", [LexError::Escape(EscapeError::EmptyBraces, 0..1)]);
+    errors!(r"\u{}", [LexError::Escape(EscapeError::EmptyBraces, span(0..1))]);
+    errors!(r"\N{}", [LexError::Escape(EscapeError::EmptyBraces, span(0..1))]);
 
     // invalid digit in braces
-    errors!(r"'\u{EP}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
-    errors!(r"'\u{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, 1..2)]);
+    errors!(r"'\u{EP}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, span(1..2))]);
+    errors!(r"'\u{_}'", [LexError::Escape(EscapeError::InvalidDigitInBraces { base: 16 }, span(1..2))]);
 
     // les UCNs en dehors d'un char ou str ne peuvent pas désigner un caractère
     // de contrôle ou un caractère du basic character set, dans ce cas on note
@@ -1041,36 +1060,36 @@ fn ucn() {
     // `\u0041` == `A`
     tokens_and_errors!(r"ab\u0041c",
         [(name("abAc"), 0..9)],
-        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, range: 2..3 }]
+        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, span: span(2..3) }]
     );
 
     tokens_and_errors!(r"ab\u0001c",
         [(name("ab"), 0..2), (Unknown, 2..8), (name("c"), 8..9)],
-        [LexError::UnexpectedBasicUcn { c: '\u{1}', is_control: true, range: 2..3 }]
+        [LexError::UnexpectedBasicUcn { c: '\u{1}', is_control: true, span: span(2..3) }]
     );
 
     tokens_and_errors!(r"\u0041",
         [(name("A"), 0..6)],
-        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, range: 0..1 }]
+        [LexError::UnexpectedBasicUcn { c: 'A', is_control: false, span: span(0..1) }]
     );
 
     // les ucns invalides sont interprétés caractère par caractère
     tokens_and_errors!(r"ab\uCD",
         [(name("ab"), 0..2), (Unknown, 2..3), (name("uCD"), 3..6)],
-        [LexError::Escape(EscapeError::ExpectedHexDigits(4), 2..3)]
+        [LexError::Escape(EscapeError::ExpectedHexDigits(4), span(2..3))]
     );
 
     // on ne peut pas utiliser des UCN pour former un UCN
     // `\u0061` == `a`
     tokens!(r"'\u000a'", [(Char(Encoding::Ordinary, '\n' as u32, None), 0..8)]);
-    errors!(r"'\u000\u0061'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
+    errors!(r"'\u000\u0061'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), span(1..2))]);
     tokens!(r"'\U0000000a'", [(Char(Encoding::Ordinary, '\n' as u32, None), 0..12)]);
-    errors!(r"'\U0000000\u0061'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), 1..2)]);
+    errors!(r"'\U0000000\u0061'", [LexError::Escape(EscapeError::ExpectedHexDigits(8), span(1..2))]);
     // `\u007B` == `{`
     tokens!(r"'\u{0000}'", [(Char(Encoding::Ordinary, '\0' as u32, None), 0..10)]);
-    errors!(r"'\u\u007B0000}'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), 1..2)]);
+    errors!(r"'\u\u007B0000}'", [LexError::Escape(EscapeError::ExpectedHexDigits(4), span(1..2))]);
     tokens!(r"'\N{LATIN SMALL LETTER A}'", [(Char(Encoding::Ordinary, 'a' as u32, None), 0..26)]);
-    errors!(r"'\N\u007BLATIN SMALL LETTER A}'", [LexError::Escape(EscapeError::ExpectedOpenBrace, 1..2)]);
+    errors!(r"'\N\u007BLATIN SMALL LETTER A}'", [LexError::Escape(EscapeError::ExpectedOpenBrace, span(1..2))]);
 
     // with line continuations
     tokens!("u'\\\n\\\\\nu\\\n00\\\nE9\\\n'", [(Char(Encoding::Utf16, 'é' as u32, None), 0..19)]);
@@ -1146,7 +1165,7 @@ fn pp_number() {
     tokens!("0x1'e+1", [(Number, 0..5), (Plus, 5..6), (Number, 6..7)]);
     tokens!("a123", [(name("a123"), 0..4)]);
     tokens!(".abcd", [(Dot, 0..1), (name("abcd"), 1..5)]);
-    errors!("1'.5", [LexError::Unterminated(UnterminatedKind::Char, 1)]);
+    errors!("1'.5", [LexError::Unterminated(UnterminatedKind::Char, span(1..2))]);
 
     // with line continuations and UCN
     tokens!("0\\\nx\\\n36\\\ne_\\\na\\u00E9\\\nc", [(Number, 0..24)]);
@@ -1489,76 +1508,76 @@ fn header_name() {
         <salut>
         "salut"
     "#;
-    let mut lexer = Lexer::new(src);
-    assert_eq!(lexer.lex_header_name(), Some((Header(HeaderKind::Angle), 9..16)));
-    assert_eq!(lexer.lex_header_name(), Some((Header(HeaderKind::Quote), 25..32)));
+    let mut lexer = Lexer::new(src, Loc(0));
+    assert_eq!(lexer.lex_header_name().map(to_kind_range), Some((Header(HeaderKind::Angle), 9..16)));
+    assert_eq!(lexer.lex_header_name().map(to_kind_range), Some((Header(HeaderKind::Quote), 25..32)));
 
     // pas un header name car contient un newline
     let src = "
         <salut
             >
     ";
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert_eq!(lexer.lex_header_name(), None);
 
     let src = r#"
         "salut
             "
     "#;
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert_eq!(lexer.lex_header_name(), None);
 
     // pas un header name car non terminé
     let src = "
         <salut
     ";
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert_eq!(lexer.lex_header_name(), None);
 
     let src = r#"
         "salut
     "#;
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert_eq!(lexer.lex_header_name(), None);
 
     let src = r#"
         <salut"
     "#;
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert_eq!(lexer.lex_header_name(), None);
 
     let src = r#"
         "salut>
     "#;
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert_eq!(lexer.lex_header_name(), None);
 
     // si on veut lexer un header name mais que le prochain token n'en est pas un,
     // le lexer n'avance pas
     let src = "+";
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert_eq!(lexer.lex_header_name(), None);
-    assert_eq!(lexer.lex(), (Plus, 0..1));
+    assert_eq!(to_kind_range(lexer.lex()), (Plus, 0..1));
 
     // avec des tokens après
     let src = "
         <salut> a
       /*  */      b
     ";
-    let mut lexer = Lexer::new(src);
-    assert_eq!(lexer.lex_header_name(), Some((Header(HeaderKind::Angle), 9..16)));
-    assert_eq!(lexer.lex(), (name("a"), 17..18));
-    assert_eq!(lexer.lex(), (name("b"), 37..38));
+    let mut lexer = Lexer::new(src, Loc(0));
+    assert_eq!(lexer.lex_header_name().map(to_kind_range), Some((Header(HeaderKind::Angle), 9..16)));
+    assert_eq!(to_kind_range(lexer.lex()), (name("a"), 17..18));
+    assert_eq!(to_kind_range(lexer.lex()), (name("b"), 37..38));
 }
 
 #[test]
 fn bol() {
-    let lexer = Lexer::new("");
+    let lexer = Lexer::new("", Loc(0));
     assert!(lexer.at_bol());
 
-    let mut lexer = Lexer::new("a");
+    let mut lexer = Lexer::new("a", Loc(0));
     assert!(lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("a"), 0..1));
+    assert_eq!(to_kind_range(lexer.lex()), (name("a"), 0..1));
     // on considère bien qu'on est au début de la ligne après le dernier token
     assert!(lexer.at_bol());
     assert!(lexer.at_bol());
@@ -1581,43 +1600,82 @@ d /* abc */ + 2
     blabla */ b
 ";
 
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, Loc(0));
     assert!(lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("a"), 7..8));
+    assert_eq!(to_kind_range(lexer.lex()), (name("a"), 7..8));
 
     assert!(!lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("b"), 9..10));
+    assert_eq!(to_kind_range(lexer.lex()), (name("b"), 9..10));
 
     assert!(lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("c"), 38..39));
+    assert_eq!(to_kind_range(lexer.lex()), (name("c"), 38..39));
 
     assert!(lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("d"), 47..48));
+    assert_eq!(to_kind_range(lexer.lex()), (name("d"), 47..48));
 
     assert!(!lexer.at_bol());
-    assert_eq!(lexer.lex(), (Plus, 59..60));
+    assert_eq!(to_kind_range(lexer.lex()), (Plus, 59..60));
 
     assert!(!lexer.at_bol());
-    assert_eq!(lexer.lex(), (Number, 61..62));
+    assert_eq!(to_kind_range(lexer.lex()), (Number, 61..62));
 
     assert!(lexer.at_bol());
-    assert_eq!(lexer.lex(), (Semi, 79..80));
+    assert_eq!(to_kind_range(lexer.lex()), (Semi, 79..80));
 
     assert!(lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("a"), 86..87));
+    assert_eq!(to_kind_range(lexer.lex()), (name("a"), 86..87));
 
     // après une line cont, ce n'est pas au début de la ligne
     assert!(!lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("b"), 94..95));
+    assert_eq!(to_kind_range(lexer.lex()), (name("b"), 94..95));
 
     assert!(!lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("c"), 96..97));
+    assert_eq!(to_kind_range(lexer.lex()), (name("c"), 96..97));
 
     assert!(lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("a"), 103..104));
+    assert_eq!(to_kind_range(lexer.lex()), (name("a"), 103..104));
 
     assert!(!lexer.at_bol());
-    assert_eq!(lexer.lex(), (name("b"), 122..123));
+    assert_eq!(to_kind_range(lexer.lex()), (name("b"), 122..123));
 
     assert!(lexer.at_bol());
+}
+
+#[test]
+fn space_before() {
+    let src =
+r"a
+b/*
+    blabla
+*/c
+
+ b
+
+/**/a // blabla
+b
+
+    a/* salut */
+b
+
+    a \
+b
+
+    a+\
+b
+";
+
+    let mut lexer = Lexer::new(src, Loc(0));
+    assert_eq!(lexer.lex(), Token::new(name("a"), span(0..1), false));
+    assert_eq!(lexer.lex(), Token::new(name("b"), span(2..3), true));
+    assert_eq!(lexer.lex(), Token::new(name("c"), span(19..20), true));
+    assert_eq!(lexer.lex(), Token::new(name("b"), span(23..24), true));
+    assert_eq!(lexer.lex(), Token::new(name("a"), span(30..31), true));
+    assert_eq!(lexer.lex(), Token::new(name("b"), span(42..43), false));
+    assert_eq!(lexer.lex(), Token::new(name("a"), span(49..50), true));
+    assert_eq!(lexer.lex(), Token::new(name("b"), span(62..63), true));
+    assert_eq!(lexer.lex(), Token::new(name("a"), span(69..70), true));
+    assert_eq!(lexer.lex(), Token::new(name("b"), span(73..74), true));
+    assert_eq!(lexer.lex(), Token::new(name("a"), span(80..81), true));
+    assert_eq!(lexer.lex(), Token::new(Plus, span(81..82), false));
+    assert_eq!(lexer.lex(), Token::new(name("b"), span(84..85), false));
 }
