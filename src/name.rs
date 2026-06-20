@@ -15,10 +15,6 @@ impl Debug for Name {
 }
 
 impl Name {
-    pub fn from(s: &str) -> Self {
-        NAMER.with_borrow_mut(|n| n.add(s))
-    }
-
     pub fn as_str(&self) -> &str {
         // SAFETY: le namer est thread_local et il n'y a qu'un thread donc le
         // str retourné par le namer devrait vivre au moins aussi longtemps que
@@ -36,6 +32,12 @@ impl Name {
 
     pub fn is_attr_kw(self) -> bool {
         self.0 >= attr_kw::Assume.0 && self.0 <= attr_kw::NoUniqueAddress.0
+    }
+}
+
+impl<T: AsRef<str>> From<T> for Name {
+    fn from(value: T) -> Self {
+        NAMER.with_borrow_mut(|n| n.add(value.as_ref()))
     }
 }
 
@@ -196,12 +198,28 @@ predefined_names! {
         Error: "error",
         Warning: "warning",
         Pragma: "pragma",
-        _Pragma: "_Pragma",
+        PragmaOp: "_Pragma",
         HasInclude: "__has_include",
         HasCppAttribute: "__has_cpp_attribute",
         HasEmbed: "__has_embed",
+        Limit: "limit",
+        Prefix: "prefix",
+        Suffix: "suffix",
+        IfEmpty: "if_empty",
         VaArgs: "__VA_ARGS__",
         VaOpt: "__VA_OPT__",
+        Once: "once",
+
+        // les directives `#pragma` et l'opérateur `_Pragma` sont remplacés par
+        // les tokens du pragma, délimités par un builtin pragma et pragma end,
+        // pour que le compilateur (après preprocessing) n'ait qu'une seule forme
+        // à gérer
+        // on donne un nom bidon parce que le nom de ces trucs n'a aucune pertinence,
+        // il faut juste que ça soit un nom qui ne puisse pas être un identifier
+        // (l'utilisateur ne doit pas pouvoir le nommer, c'est vraiment utilisé
+        // que en interne)
+        BuiltinPragma: "@1",
+        BuiltinPragmaEnd: "@2",
     }
 }
 

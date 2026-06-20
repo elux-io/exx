@@ -6,7 +6,6 @@ use std::{
     cell::{Cell, OnceCell},
     fs,
     io::{self, ErrorKind},
-    ops::Range,
     path::{Path, PathBuf},
 };
 
@@ -387,7 +386,7 @@ impl SourceHub {
         // chaque Loc couverte par ce span doit provenir de la même origine
         let origin = self.loc_origin(span.lo);
         span.lo.0 <= span.hi.0
-            && (span.lo.0 + 1..=span.hi.0).all(|i| self.loc_origin(Loc(i)) == origin)
+            && (span.lo.0 + 1..span.hi.0).all(|i| self.loc_origin(Loc(i)) == origin)
     }
 
     fn alloc_span(&mut self, len: u32) -> Span {
@@ -398,8 +397,13 @@ impl SourceHub {
             // source et pas la suivante
             hi: Loc(self.next_loc.0 + len + 1),
         };
-        self.next_loc.0 = span.hi.0;
+        self.next_loc = span.hi;
         span
+    }
+
+    /// fonction utilisée juste par les tests
+    pub fn set_next_loc(&mut self, loc: Loc) {
+        self.next_loc = loc;
     }
 }
 
@@ -496,13 +500,6 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn from_range(r: Range<u32>, source_start: Loc) -> Self {
-        Self {
-            lo: Loc(r.start + source_start.0),
-            hi: Loc(r.end + source_start.0),
-        }
-    }
-
     #[must_use]
     pub fn apply_subst(self, subst: &Subst) -> Self {
         Self {
@@ -547,6 +544,8 @@ pub enum LoadError {
     Unreadable,
 }
 
+// todo: il faudrait que ça puisse retourner + d'infos sur le fichier, par ex
+// le timestamp et de quoi établir son identité (pour #pragma once)
 pub trait FileLoader {
     fn load(&self, path: &Path) -> Result<Vec<u8>, LoadError>;
 

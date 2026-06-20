@@ -1,7 +1,7 @@
 //! ~ lexical analysis ~
 
 use crate::{
-    name::Name,
+    name::{Name, pp_kw},
     source::{Loc, SourceHub, Span},
 };
 use arrayvec::ArrayVec;
@@ -199,6 +199,8 @@ pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
     pub space_before: bool,
+    pub frozen: bool,
+    pub placemarker: bool,
 }
 
 impl Token {
@@ -207,6 +209,8 @@ impl Token {
             kind,
             span,
             space_before,
+            frozen: false,
+            placemarker: false,
         }
     }
 
@@ -743,13 +747,17 @@ fn make_float_number_lit(value: f64, suffix: &str, suffix_start: Option<usize>) 
 // ça voudrait dire que le lexer ne verrait plus le texte original donc les locations
 // seront incorrectes mais on pourrait les remapper
 #[derive(Clone)]
-struct SkipLineCont<'a> {
-    raw: Chars<'a>,
+pub struct SkipLineCont<'a> {
+    pub raw: Chars<'a>,
 }
 
 impl SkipLineCont<'_> {
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.raw.as_str().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -768,7 +776,7 @@ pub fn eat_newline(chars: &mut (impl Iterator<Item = char> + Clone)) -> bool {
         Some('\r') if let Some('\n') = it.clone().next() => {
             it.next();
         }
-        Some('\r') | Some('\n') => {}
+        Some('\r' | '\n') => {}
         _ => return false,
     }
 
@@ -839,6 +847,8 @@ pub enum LexError {
         is_control: bool,
         span: Span,
     },
+    ForbiddenVaArgs(Name, Span),
+    ForbiddenHasExpr(Name, Span),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1095,9 +1105,11 @@ pub fn to_span(r: Range<u32>, source_start: Loc) -> Span {
     }
 }
 
+#[derive(Clone)]
 pub struct Lexer<'a> {
+    pub chars: SkipLineCont<'a>,
+    pub forbid_va_args: bool,
     src: &'a str,
-    chars: SkipLineCont<'a>,
     source_start: Loc,
     start: u32,
     at_bol: bool,
@@ -1110,8 +1122,9 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str, source_start: Loc) -> Self {
         let mut lexer = Self {
-            src,
             chars: SkipLineCont { raw: src.chars() },
+            forbid_va_args: true,
+            src,
             source_start,
             start: 0,
             at_bol: false,
@@ -1356,7 +1369,7 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn eof(&self) -> bool {
-        self.chars.len() == 0
+        self.chars.is_empty()
     }
 
     /// true si le prochain token est le premier de la ligne (ignore les
@@ -1365,8 +1378,53 @@ impl<'a> Lexer<'a> {
         self.at_bol
     }
 
+    pub fn set_at_bol(&mut self, bol: bool) {
+        self.at_bol = bol;
+    }
+
+    pub fn next_has_space_before(&self) -> bool {
+        self.next_has_space_before
+    }
+
     pub fn pos(&self) -> u32 {
         (self.src.len() - self.chars.len()) as u32
+    }
+
+    pub fn eat_whitespace(&mut self) {
+        self.at_bol = false;
+        self.next_has_space_before = false;
+
+        loop {
+            // les line continuations seraient mangées automatiquement mais on
+            // veut les manger explicitement car sinon elles pourraient faire
+            // partie du range du prochain token
+            eat_line_cont(&mut self.chars.raw);
+
+            match self.peek(0) {
+                '/' => match self.peek(1) {
+                    '/' => self.line_comment(),
+                    '*' => self.multiline_comment(),
+                    _ => return,
+                },
+                c if is_whitespace(c) => {
+                    self.next_has_space_before = true;
+                    if eat_newline(&mut self.chars) {
+                        self.at_bol = true;
+                    } else {
+                        self.chars.raw.next();
+                    }
+                }
+                '\0' => {
+                    // après le dernier token on considère toujours qu'on est
+                    // au début de la ligne car le compilateur doit toujours se
+                    // comporter comme si il y avait un newline à la fin du fichier
+                    // même si ce n'est pas le cas (voir [lex.phases])
+                    self.at_bol = true;
+                    return;
+                }
+                _ => return,
+            }
+        }
     }
 
     fn name_or_prefix(&mut self) -> TokenKind {
@@ -1376,7 +1434,8 @@ impl<'a> Lexer<'a> {
             self.bump();
         }
 
-        let ident = extract_lexeme_basic(&self.src[self.start as usize..self.pos() as usize]);
+        let range = self.start..self.pos();
+        let ident = extract_lexeme_basic(&self.src[range.start as usize..range.end as usize]);
 
         match self.peek(0) {
             '\'' if is_char_prefix(&ident) => {
@@ -1387,7 +1446,18 @@ impl<'a> Lexer<'a> {
                 self.bump();
                 self.str(&ident)
             }
-            _ => to_alt_token(&ident).unwrap_or_else(|| TokenKind::Name(Name::from(&ident))),
+            _ => to_alt_token(&ident).unwrap_or_else(|| {
+                let name = Name::from(&ident);
+
+                if self.forbid_va_args && matches!(name, pp_kw::VaArgs | pp_kw::VaOpt) {
+                    self.errors.push(LexError::ForbiddenVaArgs(
+                        name,
+                        to_span(range, self.source_start),
+                    ));
+                }
+
+                TokenKind::Name(name)
+            }),
         }
     }
 
@@ -1801,43 +1871,6 @@ impl<'a> Lexer<'a> {
             Some(NonZeroU32::new(pos as u32).expect("pos should be > 0"))
         } else {
             None
-        }
-    }
-
-    fn eat_whitespace(&mut self) {
-        self.at_bol = false;
-        self.next_has_space_before = false;
-
-        loop {
-            // les line continuations seraient mangées automatiquement mais on
-            // veut les manger explicitement car sinon elles pourraient faire
-            // partie du range du prochain token
-            eat_line_cont(&mut self.chars.raw);
-
-            match self.peek(0) {
-                '/' => match self.peek(1) {
-                    '/' => self.line_comment(),
-                    '*' => self.multiline_comment(),
-                    _ => return,
-                },
-                c if is_whitespace(c) => {
-                    self.next_has_space_before = true;
-                    if eat_newline(&mut self.chars) {
-                        self.at_bol = true;
-                    } else {
-                        self.bump();
-                    }
-                }
-                '\0' => {
-                    // après le dernier token on considère toujours qu'on est
-                    // au début de la ligne car le compilateur doit toujours se
-                    // comporter comme si il y avait un newline à la fin du fichier
-                    // même si ce n'est pas le cas (voir [lex.phases])
-                    self.at_bol = true;
-                    return;
-                }
-                _ => return,
-            }
         }
     }
 

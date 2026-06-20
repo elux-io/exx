@@ -1,11 +1,12 @@
-![](/../images/logo.png)
+<div align="center">
+    <img src="/../images/logo.png" alt="logo" width="500px" />
+</div>
 
 An attempt to make a (toy) C++ compiler, for learning and fun (for some definition of “fun”).
 
 > [!NOTE]
-> There is no conceivable arrangement of matter and energy in any universe across the
-infinite tree of all possible realities that could ever make this compiler even remotely
-approach full conformance with the arcane dictates of the ISO C++ Standard.
+> There is no universe across the infinite tree of all possible realities where this compiler
+fully conforms to the arcane dictates of the ISO C++ Standard, nor will there ever be.
 
 ## Stats
 
@@ -41,28 +42,36 @@ approach full conformance with the arcane dictates of the ISO C++ Standard.
 - ✅ Alternative tokens (`<%`, `<:`, `and`, ...)
 - ✅ Line continuations
 
-### Preprocessor
+### Preprocessing
 
-- ❌ `#if`, `#ifdef`, `#ifndef`, `#elif`, `#elifdef`, `#elifndef`, `#else`, `#endif`
-- ❌ `#include`, `__has_include`
-- ❌ `#define`, `#undef`, `defined`
-- ❌ Expression evaluation
-- ❌ Function-like macros
-- ❌ Variable arguments (`...`, `__VA_ARGS__`, `__VA_OPT__`)
-- ❌ `#` operator
-- ❌ `##` operator
-- ❌ `#line`
-- ❌ `#error`, `#warning`
-- ❌ `#pragma`, `_Pragma`
-- ❌ Predefined macros (`__cplusplus`, `__LINE__`, `__TIME__`, `__has_cpp_attribute`, ...)
-- ❌ Null directive (`#`)
+- ✅ `#if`, `#ifdef`, `#ifndef`, `#elif`, `#elifdef`, `#elifndef`, `#else`, `#endif`
+- ✅ `#define`, `#undef`, `defined`
+- ✅ `#include`, `__has_include`
+- ✅ `#embed`, `__has_embed`
+- ✅ `__has_cpp_attribute`
+- ✅ Expression evaluation
+- ✅ Macro expansion
+- ✅ Variable arguments (`...`, `__VA_ARGS__`, `__VA_OPT__`)
+- ✅ `#` operator
+- ✅ `##` operator
+- ✅ `#line`
+- ✅ `#error`, `#warning`
+- ✅ `#pragma`, `_Pragma`
+- ✅ Predefined macros (`__cplusplus`, `__LINE__`, `__FILE__`, ...)
+- ✅ Null directive (`#`)
 - ❌ `import`, `export`, `module`
-- ❌ `#embed`, `__has_embed`
 - ❌ Header guard optimization
-- ❌ `#pragma once`
-- ❌ `#pragma pack`
-- ❌ `#pragma STDC`
-- ❌ Undefined behaviors treated as ill-formed
+- Non-standard extensions
+  - ✅ `#pragma once`
+  - ❌ `#include_next`, `__has_include_next`
+  - ✅ `__BASE_FILE__`
+  - ✅ `__FILE_NAME__`
+  - ✅ `__COUNTER__`
+  - ➖ `__TIMESTAMP__`
+  - ✅ `__INCLUDE_LEVEL__`
+  - ❌ Linemarkers
+  - ❌ `, ## __VA_ARGS__` special concatenation
+  - ❌ Directives in macro arguments
 
 ### Parsing
 
@@ -254,7 +263,6 @@ approach full conformance with the arcane dictates of the ISO C++ Standard.
 - Attributes
   - ❌ `alignas`
   - ❌ `[[assume]]`
-  - ❌ `[[carries_dependency]]`
   - ❌ `[[deprecated]]`
   - ❌ `[[fallthrough]]`
   - ❌ `[[likely]]`, `[[unlikely]]`
