@@ -2,7 +2,7 @@ use bumpalo::Bump;
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fmt::{self, Debug, Formatter},
+    fmt::{self, Debug, Display, Formatter},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,6 +11,12 @@ pub struct Name(u32);
 impl Debug for Name {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "Name({} \"{}\")", self.0, self.as_str())
+    }
+}
+
+impl Display for Name {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

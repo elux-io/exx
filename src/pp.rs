@@ -4054,7 +4054,7 @@ impl From<LexError> for Diag {
                 span,
             ),
             ForbiddenVaArgs(name, span) | ForbiddenHasExpr(name, span) => (
-                format!("Illegal use of `{}`", name.as_str()),
+                format!("Illegal use of `{}`", name),
                 span,
             ),
         };
@@ -4300,7 +4300,7 @@ impl From<ExpectedTokensInDirective> for Diag {
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
-                text: format!("after this `#{}` directive", v.directive.as_str()),
+                text: format!("after this `#{}` directive", v.directive),
             }])],
         }
     }
@@ -4608,7 +4608,7 @@ impl From<NoIf> for Diag {
     fn from(v: NoIf) -> Self {
         Diag {
             kind: DiagKind::Error,
-            title: format!("`#{}` without `#if`", v.directive.as_str()),
+            title: format!("`#{}` without `#if`", v.directive),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
@@ -4628,7 +4628,7 @@ impl From<NoEndif> for Diag {
     fn from(v: NoEndif) -> Self {
         Diag {
             kind: DiagKind::Error,
-            title: format!("Unterminated `#{}`", v.directive.as_str()),
+            title: format!("Unterminated `#{}`", v.directive),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
@@ -4648,7 +4648,7 @@ impl From<InvalidDirectiveAfterElse> for Diag {
     fn from(v: InvalidDirectiveAfterElse) -> Self {
         Diag {
             kind: DiagKind::Error,
-            title: format!("`#{}` after `#else`", v.directive.as_str()),
+            title: format!("`#{}` after `#else`", v.directive),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
@@ -4684,7 +4684,7 @@ impl From<ExpandedStandardEmbedParam> for Diag {
         // todo: ça serait bien de savoir précisément si c'est un #embed ou __has_embed
         Diag {
             kind: DiagKind::Error,
-            title: format!("Illegal use of `{}` in embed", v.name.as_str()),
+            title: format!("Illegal use of `{}` in embed", v.name),
             parts,
         }
     }
@@ -4726,7 +4726,7 @@ impl From<DuplicateEmbedParam> for Diag {
     fn from(v: DuplicateEmbedParam) -> Self {
         Diag {
             kind: DiagKind::Error,
-            title: format!("Duplicate embed parameter `{}`", v.name.as_str()),
+            title: format!("Duplicate embed parameter `{}`", v.name),
             parts: vec![DiagPart::Snippet(vec![
                 Squiggle {
                     primary: true,
@@ -4753,13 +4753,13 @@ pub struct UnknownEmbedParam {
 impl From<UnknownEmbedParam> for Diag {
     fn from(v: UnknownEmbedParam) -> Self {
         let prefix = if let Some(prefix) = v.prefix {
-            format!("{}::", prefix.as_str())
+            format!("{}::", prefix)
         } else {
             "".to_owned()
         };
         Diag {
             kind: DiagKind::Error,
-            title: format!("Unknown embed parameter `{prefix}{}`", v.name.as_str()),
+            title: format!("Unknown embed parameter `{prefix}{}`", v.name),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
@@ -4937,7 +4937,7 @@ impl From<MacRedefined> for Diag {
 
         Diag {
             kind: DiagKind::Error,
-            title: format!("Redefinition of macro `{}`", v.name.as_str()),
+            title: format!("Redefinition of macro `{}`", v.name),
             parts,
         }
     }
@@ -4986,11 +4986,11 @@ impl From<RedefinedPredefMac> for Diag {
         let define = if v.is_define { "redefine" } else { "undefine" };
         Diag {
             kind: DiagKind::Error,
-            title: format!("Redefinition of macro `{}`", v.name.as_str()),
+            title: format!("Redefinition of macro `{}`", v.name),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
-                text: format!("cannot {define} builtin macro `{}`", v.name.as_str()),
+                text: format!("cannot {define} builtin macro `{}`", v.name),
             }])],
         }
     }
@@ -5034,7 +5034,7 @@ impl From<NoSpaceAfterMacName> for Diag {
             kind: DiagKind::Error,
             title: format!(
                 "Missing whitespace between the name and body of macro `{}`",
-                v.name.as_str()
+                v.name
             ),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
@@ -5064,10 +5064,9 @@ impl From<InvalidMacParamList> for Diag {
             let (span, text) = match e {
                 HasNewline(span) => (span, "cannot contain newlines".to_owned()),
                 ExpectedName(span) => (span, "parameters can only be identifiers".to_owned()),
-                DuplicateParam(name, span) => (
-                    span,
-                    format!("parameter `{}` is already defined", name.as_str()),
-                ),
+                DuplicateParam(name, span) => {
+                    (span, format!("parameter `{}` is already defined", name))
+                }
                 EllipsisNotAtEnd(span) => (span, "must be the last parameter".to_owned()),
                 ExpectedComma(span) => (span, "expected `,` or `)` instead of this".to_owned()),
             };
@@ -5148,7 +5147,7 @@ impl From<WrongMacNumArgs> for Diag {
         };
         Diag {
             kind: DiagKind::Error,
-            title: format!("{too} arguments provided to macro `{}`", v.name.as_str()),
+            title: format!("{too} arguments provided to macro `{}`", v.name),
             parts,
         }
     }
@@ -5164,7 +5163,7 @@ impl From<UnterminatedMacCall> for Diag {
     fn from(v: UnterminatedMacCall) -> Self {
         Diag {
             kind: DiagKind::Error,
-            title: format!("Unterminated call to macro `{}`", v.name.as_str()),
+            title: format!("Unterminated call to macro `{}`", v.name),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
@@ -5305,7 +5304,7 @@ impl From<ForbiddenHasExpr> for Diag {
     fn from(v: ForbiddenHasExpr) -> Self {
         Diag {
             kind: DiagKind::Error,
-            title: format!("Illegal use of `{}`", v.name.as_str()),
+            title: format!("Illegal use of `{}`", v.name),
             parts: vec![DiagPart::Snippet(vec![Squiggle {
                 primary: true,
                 span: v.span,
