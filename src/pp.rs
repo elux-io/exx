@@ -755,15 +755,14 @@ impl<'a, 'b> InnerPreprocessor<'a, 'b> {
         let mut nest = 0;
         loop {
             self.skip_until_directive();
-            let at_bol = self.lexer.at_bol();
-            let token = self.lexer.lex();
-            if token.kind == TokenKind::Eof {
+            if self.lexer.eof() {
                 return;
             }
-            if at_bol {
+            if self.lexer.at_bol() {
                 // null directive
                 continue;
             }
+            let token = self.lexer.lex();
 
             match token.kind {
                 TokenKind::Name(kw::If | pp_kw::Ifdef | pp_kw::Ifndef) => nest += 1,

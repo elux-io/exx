@@ -373,6 +373,16 @@ fn r#if() {
     let src = "
         #if false
         A
+        #
+        #else
+        B
+        #endif
+    ";
+    pp!(src, "B");
+
+    let src = "
+        #if false
+        A
         ##else
         ''
         #else
