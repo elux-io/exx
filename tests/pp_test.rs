@@ -3686,6 +3686,14 @@ fn fn_macro() {
     ";
     pp!(src, "F() + (F(),");
 
+    let src = "
+        #define A F(
+        #define B A) A
+        #define F() B
+        B))
+    ";
+    pp!(src, "B F() F()");
+
     // les arguments sont expandés séparément donc il faut que les appels de macro
     // soient complets dans l'argument lui même
     let src = "

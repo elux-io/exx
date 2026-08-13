@@ -2883,11 +2883,16 @@ impl<'a, 'b> MacExpander<'a, 'b> {
             self.expand(out, next, lexer.as_deref_mut(), next_needs_space);
         }
 
-        // todo: on doit aller rechercher la macro, on ne peut pas utiliser la
-        // référence qu'on avait juste avant la boucle mais ça serait bien d'une
-        // manière ou d'une autre qu'on ait pas besoin de le chercher 2 fois
-        self.pp.mac_table.get_mut(&mac_name).unwrap().expanding = false;
-        self.currently_expanding.pop();
+        // on s'assure qu'on pop bien la macro qui a été push juste avant, car il
+        // est possible qu'elle ait déjà été pop (dans `expand_args`, au cours de
+        // l'expansion dans la boucle précédente)
+        if self.currently_expanding.last() == Some(&(mac_name, n)) {
+            // todo: on doit aller rechercher la macro, on ne peut pas utiliser la
+            // référence qu'on avait juste avant la boucle mais ça serait bien d'une
+            // manière ou d'une autre qu'on ait pas besoin de le chercher 2 fois
+            self.pp.mac_table.get_mut(&mac_name).unwrap().expanding = false;
+            self.currently_expanding.pop();
+        }
 
         *next_needs_space |=
             out.len() == prev_len && token_expanding.space_before || space_after_concat;
