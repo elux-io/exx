@@ -734,11 +734,11 @@ fn raw_str() {
     errors!(r#"R"de\im(abc)de\im"#, [LexError::Str(StrError::InvalidCharInDelim, span(4..5))]);
 
     // too many chars in delim
-    tokens!(r#"R"abcdefghijklmno(abc)abcdefghijklmno""#, [(Str(StrKind::Raw, Encoding::Ordinary, to_utf8("abc"), None), 0..38)]);
+    tokens!(r#"R"abcdefghijklmnop(abc)abcdefghijklmnop""#, [(Str(StrKind::Raw, Encoding::Ordinary, to_utf8("abc"), None), 0..40)]);
     // on note l'erreur mais on reconnaît quand même la chaîne pour pouvoir continuer le lexing
-    tokens_and_errors!(r#"R"abcdefghijklmnop(abc)abcdefghijklmnop""#,
-        [(Str(StrKind::Raw, Encoding::Ordinary, to_utf8("abc"), None), 0..40)],
-        [LexError::Str(StrError::TooManyCharsInDelim, span(2..18))]
+    tokens_and_errors!(r#"R"abcdefghijklmnopq(abc)abcdefghijklmnopq""#,
+        [(Str(StrKind::Raw, Encoding::Ordinary, to_utf8("abc"), None), 0..42)],
+        [LexError::Str(StrError::TooManyCharsInDelim, span(2..19))]
     );
 
     // without `(` and `)`

@@ -1651,7 +1651,7 @@ impl<'a> Lexer<'a> {
             return TokenKind::Str(StrKind::Raw, encoding, ByteString(vec![0]), None);
         }
 
-        if delim.len() >= MAX_RAW_STR_DELIM_LEN {
+        if delim.len() > MAX_RAW_STR_DELIM_LEN {
             self.errors.push(LexError::Str(
                 StrError::TooManyCharsInDelim,
                 to_span(delim_start..pos, self.source_start),
